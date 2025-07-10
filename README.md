@@ -1,21 +1,32 @@
-# Mortgage Calculator Web
-
-## Запуск
-
-1. Установите зависимости:
-   ```bash
-   pip install -r requirements.txt
-   ```
-2. Запустите приложение:
-   ```bash
-   python app.py
-   ```
-3. Откройте в браузере http://127.0.0.1:5000/
+# Mortgage Calculator Monorepo
 
 ## Структура проекта
 
-- `app.py` — Flask-приложение (интерфейс)
-- `mortgage_calculator/` — бизнес-логика и визуализация (Plotly)
-- `templates/` — HTML-шаблоны для Flask (если потребуется)
-- `static/` — кастомные стили (если потребуется)
-- `requirements.txt` — зависимости 
+- `backend/` — Flask-приложение (API, бизнес-логика)
+- `frontend/` — React/TypeScript-приложение (UI, графика, таблица)
+- `.gitignore` — общие правила для всего репозитория
+- `README.md` — эта инструкция
+
+## Запуск backend (Flask)
+
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python app.py
+```
+
+## Запуск frontend (React)
+
+```bash
+cd frontend
+npm install
+npm start
+```
+
+Фронтенд будет доступен на http://localhost:3000, бэкенд — на http://localhost:5000
+
+## Docker (опционально)
+
+Можно использовать docker-compose для одновременного запуска обоих сервисов. 

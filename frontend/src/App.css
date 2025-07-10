@@ -1,0 +1,72 @@
+.App {
+  text-align: center;
+}
+
+.App-logo {
+  height: 40vmin;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .App-logo {
+    animation: App-logo-spin infinite 20s linear;
+  }
+}
+
+.App-header {
+  background-color: #282c34;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(10px + 2vmin);
+  color: white;
+}
+
+.App-link {
+  color: #61dafb;
+}
+
+@keyframes App-logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Custom table styling for header borders */
+.custom-table .ant-table-thead > tr > th {
+  border-bottom: 2px solid #a8dadc !important;
+  border-right: 1px solid #a8dadc !important;
+}
+
+.custom-table .ant-table-thead > tr > th:last-child {
+  border-right: none !important;
+}
+
+.custom-table .ant-table-thead > tr:first-child > th {
+  border-top: 2px solid #a8dadc !important;
+}
+
+.custom-table .ant-table-thead > tr:first-child > th:first-child {
+  border-left: 2px solid #a8dadc !important;
+}
+
+.custom-table .ant-table-thead > tr:first-child > th:last-child {
+  border-right: 2px solid #a8dadc !important;
+}
+
+.custom-table .ant-table-thead > tr:last-child > th {
+  border-bottom: 2px solid #a8dadc !important;
+}
+
+.custom-table .ant-table-thead > tr:last-child > th:first-child {
+  border-left: 2px solid #a8dadc !important;
+}
+
+.custom-table .ant-table-thead > tr:last-child > th:last-child {
+  border-right: 2px solid #a8dadc !important;
+}

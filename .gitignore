@@ -45,7 +45,7 @@ Desktop.ini
 .eslintcache 
 
 # Python venv and cache
-mortgage_venv/
+backend/venv/
 __pycache__/
 **/__pycache__/ 
 

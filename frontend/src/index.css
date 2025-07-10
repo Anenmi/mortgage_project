@@ -1,0 +1,50 @@
+:root {
+  --main-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+}
+
+body {
+  margin: 0;
+  font-family: var(--main-font-family);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body, h1, label {
+  font-family: var(--main-font-family) !important;
+}
+
+.mortgage-form-label, .ant-table, .ant-table-thead > tr > th, .ant-table-tbody, .ant-btn, .ant-slider, .ant-switch, .ant-tooltip-inner {
+  font-family: var(--main-font-family) !important;
+}
+
+.mortgage-form-label, h1.mortgage-form-label {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif !important;
+}
+
+.ant-slider-handle {
+  width: none !important;
+  height: none !important;
+  background: #fff !important;
+  border: none !important;
+  border-radius: 50% !important;
+  cursor: grab !important;
+}
+.ant-slider-handle:hover,
+.ant-slider-handle:focus,
+.ant-slider-handle::after {
+  width: 12px !important;
+  height: 12px !important;
+  background: #fff !important;
+  border-radius: 50% !important;
+  box-shadow: none !important;
+  border: 2px solid #415a77 !important;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}

@@ -1,7 +1,9 @@
-from flask import Flask, render_template_string, request
+from flask import Flask, render_template_string, request, jsonify
 from mortgage_calculator import MortgageCalculator
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 
 TEMPLATE = '''
 <!DOCTYPE html>
@@ -40,6 +42,9 @@ TEMPLATE = '''
         </div>
         <div>
             <label>Первоначальный взнос (руб.):<br><input type="number" name="initial_payment" min="0" required value="{{ initial_payment }}" inputmode="numeric" pattern="[0-9]*"></label>
+        </div>
+        <div>
+            <label>Минимальный первоначальный взнос (%):<br><input type="number" name="min_initial_payment_percentage" min="0" max="100" step="1" required value="{{ min_initial_payment_percentage }}" inputmode="numeric" pattern="[0-9]*"></label>
         </div>
         <div style="flex-basis: 100%; text-align: center;">
             <span class="slider-label">Срок (лет):</span>
@@ -115,6 +120,7 @@ def index():
         interest_rate=16.5,
         monthly_payment=60000,
         initial_payment=1000000,
+        min_initial_payment_percentage=20,
         min_years=5,
         max_years=10
     )
@@ -123,6 +129,7 @@ def index():
     interest_rate = defaults['interest_rate']
     monthly_payment = defaults['monthly_payment']
     initial_payment = defaults['initial_payment']
+    min_initial_payment_percentage = defaults['min_initial_payment_percentage']
     min_years = defaults['min_years']
     max_years = defaults['max_years']
     if request.method == 'POST':
@@ -130,9 +137,10 @@ def index():
             interest_rate = float(request.form['interest_rate'])
             monthly_payment = int(request.form['monthly_payment'])
             initial_payment = int(request.form['initial_payment'])
+            min_initial_payment_percentage = float(request.form.get('min_initial_payment_percentage', 20))
             min_years = int(request.form['min_years'])
             max_years = int(request.form['max_years'])
-            calc = MortgageCalculator(interest_rate, monthly_payment, initial_payment)
+            calc = MortgageCalculator(interest_rate, monthly_payment, initial_payment, min_initial_payment_percentage)
             calc.calculate(min_years, max_years)
             table_html = get_table_html(calc)
             plot_html = get_plot_html(calc)
@@ -143,6 +151,7 @@ def index():
                                       interest_rate=interest_rate,
                                       monthly_payment=monthly_payment,
                                       initial_payment=initial_payment,
+                                      min_initial_payment_percentage=min_initial_payment_percentage,
                                       min_years=min_years,
                                       max_years=max_years,
                                       table_html=table_html,
@@ -150,5 +159,22 @@ def index():
     else:
         return render_template_string(TEMPLATE, **defaults, table_html=None, plot_html=None)
 
+@app.route('/api/calculate', methods=['POST'])
+def api_calculate():
+    data = request.json
+    interest_rate = float(data['interest_rate'])
+    monthly_payment = int(data['monthly_payment'])
+    initial_payment = int(data['initial_payment'])
+    min_initial_payment_percentage = float(data.get('min_initial_payment_percentage', 20))
+    min_years = int(data['min_years'])
+    max_years = int(data['max_years'])
+    step = int(data.get('step', 0)) if 'step' in data and data['step'] else None
+    calc = MortgageCalculator(interest_rate, monthly_payment, initial_payment)
+    if step:
+        calc.calculate(min_years, max_years, step)
+    else:
+        calc.calculate(min_years, max_years)
+    return jsonify(calc.results)
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0')
