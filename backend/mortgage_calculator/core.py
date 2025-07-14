@@ -21,27 +21,6 @@ class MortgageCalculator:
         self.min_initial_payment_percentage = min_initial_payment_percentage / 100  # Convert to decimal
         self.results: List[Dict] = []
 
-    def generate_years_range(self, min_years: int, max_years: int, step: Optional[int] = None) -> List[int]:
-        """
-        Генерирует массив лет с учетом диапазона:
-        - Если step задан, всегда шаг step
-        - Если step не задан: старое поведение (авто-режим)
-        """
-        if step is not None and step > 0:
-            return list(range(min_years, max_years + 1, step))
-        range_years = max_years - min_years
-        step_auto = 1
-        if range_years > 13:
-            step_auto = 3
-        elif range_years > 7:
-            step_auto = 2
-        years = []
-        for year in range(min_years, max_years + 1, step_auto):
-            years.append(year)
-        if years and years[-1] < max_years:
-            years.append(years[-1] + step_auto)
-        return years
-
     def calculate(self, min_years: int = 1, max_years: int = 30, step: Optional[int] = None) -> None:
         """
         Для каждого количества лет в диапазоне рассчитывает:
@@ -57,7 +36,7 @@ class MortgageCalculator:
         """
         self.results = []
         r = self.interest_rate / 12
-        years_range = self.generate_years_range(min_years, max_years, step)
+        years_range = range(min_years, max_years + 1)
         for years in years_range:
             n = years * 12
             if r == 0:
@@ -363,4 +342,213 @@ class MortgageCalculator:
             return f"<div style='width:50vw;min-width:320px;max-width:100vw;margin:0 auto'>{html}</div>"
         else:
             fig.show()
-            return None 
+            return None
+
+    def plot_annuity_payments(self, years: int, return_html: bool = False) -> Optional[str]:
+        print(f"plot_annuity_payments called with years={years}, interest_rate={self.interest_rate}, monthly_payment={self.monthly_payment}, initial_payment={self.initial_payment}, min_initial_payment_percentage={self.min_initial_payment_percentage}")
+        import plotly.graph_objs as go
+        import numpy as np
+        n = years * 12
+        r = self.interest_rate / 12
+        P = self.monthly_payment
+        principal_left = self.monthly_payment * (1 - (1 + r) ** -n) / r if r != 0 else self.monthly_payment * n
+        principal = principal_left
+        months = np.arange(1, n + 1)
+        interest_paid = []
+        principal_paid = []
+        for month in months:
+            interest = principal * r
+            principal_part = P - interest
+            interest_paid.append(interest)
+            principal_paid.append(principal_part)
+            principal -= principal_part
+        interest_paid = np.array(interest_paid)
+        principal_paid = np.array(principal_paid)
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            x=months,
+            y=interest_paid,
+            name='Проценты',
+            marker_color='#e63946',
+            hovertemplate='Месяц %{x}: %{y:,.0f} руб. — проценты'
+        ))
+        fig.add_trace(go.Bar(
+            x=months,
+            y=principal_paid,
+            name='Тело кредита',
+            marker_color='#457b9d',
+            hovertemplate='Месяц %{x}: %{y:,.0f} руб. — тело кредита'
+        ))
+        fig.update_layout(
+            barmode='stack',
+            title=f'Структура аннуитетного платежа по месяцам (срок: {years} лет)',
+            xaxis_title='Месяц',
+            yaxis_title='Сумма платежа (руб.)',
+            legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='center', x=0.5),
+            margin=dict(l=40, r=40, t=60, b=40),
+            height=400,
+            plot_bgcolor='#fff',
+            paper_bgcolor='#fff',
+        )
+        if return_html:
+            html = fig.to_html(full_html=False, include_plotlyjs='cdn')
+            print(f"plot_annuity_payments finished, returning HTML of length {len(html)}")
+            return f"<div style='width:100%;min-width:320px;max-width:100vw;margin:0 auto'>{html}</div>"
+        else:
+            print("plot_annuity_payments finished, showing figure")
+            fig.show()
+            return None
+
+    def plot_annuity_payments_data(self, years: int, mode: str = 'months'):
+        import numpy as np
+        n = int(round(years * 12))
+        r = self.interest_rate / 12
+        P = self.monthly_payment
+        principal_left = self.monthly_payment * (1 - (1 + r) ** -n) / r if r != 0 else self.monthly_payment * n
+        principal = principal_left
+        months = np.arange(1, n + 1)
+        interest_paid = []
+        principal_paid = []
+        for month in months:
+            interest = principal * r
+            principal_part = P - interest
+            interest_paid.append(interest)
+            principal_paid.append(principal_part)
+            principal -= principal_part
+        interest_paid = np.array(interest_paid)
+        principal_paid = np.array(principal_paid)
+        total_paid = interest_paid + principal_paid
+        interest_pct = np.where(total_paid > 0, interest_paid / total_paid, 0)
+        principal_pct = np.where(total_paid > 0, principal_paid / total_paid, 0)
+
+        if mode == 'years':
+            # Только полные года
+            n_full_years = n // 12
+            years_arr = list(range(1, n_full_years + 1))
+            interest_by_year = []
+            principal_by_year = []
+            years_labels = []
+            for y in years_arr:
+                start = (y - 1) * 12
+                end = y * 12
+                interest_by_year.append(interest_paid[start:end].sum())
+                principal_by_year.append(principal_paid[start:end].sum())
+                years_labels.append(f'{y} год   ')
+            y_vals = years_arr
+            interest_by_year = np.array(interest_by_year)
+            principal_by_year = np.array(principal_by_year)
+            total_by_year = interest_by_year + principal_by_year
+            interest_pct_year = np.where(total_by_year > 0, interest_by_year / total_by_year, 0)
+            principal_pct_year = np.where(total_by_year > 0, principal_by_year / total_by_year, 0)
+            data = [
+                {
+                    'y': y_vals,
+                    'x': interest_by_year.tolist(),
+                    'name': 'Проценты',
+                    'type': 'bar',
+                    'orientation': 'h',
+                    'marker': {'color': '#e63946'},
+                    'hovertemplate': 'Год %{y}: %{x:,.0f} руб. — проценты',
+                    'text': [f'{p:.0%}' for p in interest_pct_year],
+                    'textposition': 'inside',
+                },
+                {
+                    'y': y_vals,
+                    'x': principal_by_year.tolist(),
+                    'name': 'Тело кредита',
+                    'type': 'bar',
+                    'orientation': 'h',
+                    'marker': {'color': '#457b9d'},
+                    'hovertemplate': 'Год %{y}: %{x:,.0f} руб. — тело кредита',
+                    'text': [f'{p:.0%}' for p in principal_pct_year],
+                    'textposition': 'inside',
+                }
+            ]
+            adaptive_height = max(100, 25 * len(y_vals))
+            layout = {
+                'barmode': 'stack',
+                'xaxis': {
+                    'title': '',
+                    'showline': False,
+                    'showgrid': False,
+                    'zeroline': False,
+                    'showticklabels': False
+                },
+                'yaxis': {
+                    'title': '',
+                    'autorange': 'reversed',
+                    'showline': False,
+                    'showgrid': False,
+                    'zeroline': False,
+                    'tickmode': 'array',
+                    'tickvals': y_vals,
+                    'ticktext': years_labels,
+                    'ticklabelstep': 1,
+                    'ticklabelposition': 'outside',
+                    'tickangle': 0,
+                    'ticklabelpadding': 40,
+                    'tickpad': 40,
+                },
+                'showlegend': False,
+                'margin': {'l': 80, 'r': 40, 't': 0, 'b': 40},
+                'plot_bgcolor': '#fff',
+                'paper_bgcolor': '#fff',
+                'height': adaptive_height,
+            }
+        else:
+            adaptive_height = max(100, 25 * len(months))
+            months_labels = [f'{m} ({(m-1)//12+1} год)   ' for m in months]
+            data = [
+                {
+                    'y': months.tolist(),
+                    'x': interest_paid.tolist(),
+                    'name': 'Проценты',
+                    'type': 'bar',
+                    'orientation': 'h',
+                    'marker': {'color': '#e63946'},
+                    'hovertemplate': 'Месяц %{y}: %{x:,.0f} руб. — проценты',
+                    'text': [f'{p:.0%}' for p in interest_pct],
+                    'textposition': 'inside',
+                },
+                {
+                    'y': months.tolist(),
+                    'x': principal_paid.tolist(),
+                    'name': 'Тело кредита',
+                    'type': 'bar',
+                    'orientation': 'h',
+                    'marker': {'color': '#457b9d'},
+                    'hovertemplate': 'Месяц %{y}: %{x:,.0f} руб. — тело кредита',
+                    'text': [f'{p:.0%}' for p in principal_pct],
+                    'textposition': 'inside',
+                }
+            ]
+            layout = {
+                'barmode': 'stack',
+                'xaxis': {
+                    'title': '',
+                    'showline': False,
+                    'showgrid': False,
+                    'zeroline': False,
+                    'showticklabels': False
+                },
+                'yaxis': {
+                    'title': '',
+                    'autorange': 'reversed',
+                    'showline': False,
+                    'showgrid': False,
+                    'zeroline': False,
+                    'tickmode': 'array',
+                    'tickvals': months.tolist(),
+                    'ticklabelposition': 'outside',
+                    'tickangle': 0,
+                    'ticklabelpadding': 40,
+                    'tickpad': 40,
+                    'ticktext': months_labels,
+                },
+                'showlegend': False,
+                'margin': {'l': 80, 'r': 40, 't': 0, 'b': 40},
+                'plot_bgcolor': '#fff',
+                'paper_bgcolor': '#fff',
+                'height': adaptive_height,
+            }
+        return data, layout 

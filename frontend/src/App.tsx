@@ -1,34 +1,69 @@
 import React, { useState } from 'react';
-import { MortgageForm } from './components/MortgageForm';
-import { ResultsChart } from './components/ResultsChart';
-import { calculateMortgage, MortgageResult, MortgageParams } from './api/mortgage';
+import './App.css';
+import MonthlyPaymentMode from './components/MonthlyPaymentMode';
+import PropertyValueMode from './components/PropertyValueMode';
 
-const App: React.FC = () => {
-  const [data, setData] = useState<MortgageResult[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  const handleCalculate = async (params: MortgageParams) => {
-    setLoading(true);
-    try {
-      const res = await calculateMortgage(params);
-      setData(res);
-    } catch (e) {
-      alert('Ошибка при расчёте');
-    }
-    setLoading(false);
-  };
+function App() {
+  const [activeTab, setActiveTab] = useState<'monthly' | 'property'>('monthly');
 
   return (
-    <div style={{ padding: 32, background: '#f8f9fa', minHeight: '100vh' }}>
-      <h1 className="mortgage-form-label" style={{ textAlign: 'center', color: '#264653', marginBottom: 24 }}>Ипотечный калькулятор</h1>
-      <div style={{ background: '#fff', borderRadius: 8, boxShadow: '0 2px 8px #eee', padding: 32, maxWidth: 900, margin: '0 auto 32px auto' }}>
-        <MortgageForm onCalculate={handleCalculate} loading={loading} />
+    <div>
+      {/* Навигационная панель */}
+      <nav style={{
+        background: '#1b263b',
+        padding: '0 0',
+        display: 'flex',
+        alignItems: 'center',
+        height: 56,
+        boxShadow: '0 2px 8px 0 rgba(30, 42, 73, 0.08)',
+        marginBottom: 0
+      }}>
+        <div style={{ display: 'flex', height: '100%' }}>
+          <button
+            onClick={() => setActiveTab('monthly')}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: activeTab === 'monthly' ? '#fff' : '#bfc9da',
+              fontWeight: activeTab === 'monthly' ? 700 : 400,
+              fontSize: 18,
+              padding: '0 32px',
+              height: '100%',
+              cursor: 'pointer',
+              borderBottom: activeTab === 'monthly' ? '3px solid #fff' : '3px solid transparent',
+              transition: 'all 0.2s',
+              outline: 'none',
+            }}
+          >
+            Если знаю ежемесячный платеж
+          </button>
+          <button
+            onClick={() => setActiveTab('property')}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: activeTab === 'property' ? '#fff' : '#bfc9da',
+              fontWeight: activeTab === 'property' ? 700 : 400,
+              fontSize: 18,
+              padding: '0 32px',
+              height: '100%',
+              cursor: 'pointer',
+              borderBottom: activeTab === 'property' ? '3px solid #fff' : '3px solid transparent',
+              transition: 'all 0.2s',
+              outline: 'none',
+            }}
+          >
+            Если знаю стоимость жилья
+          </button>
+        </div>
+      </nav>
+      {/* Контент вкладки */}
+      <div style={{ background: '#f7f9fb', minHeight: '100vh', paddingTop: 0 }}>
+        {activeTab === 'monthly' && <MonthlyPaymentMode />}
+        {activeTab === 'property' && <PropertyValueMode />}
       </div>
-      {data.length > 0 && (
-        <ResultsChart data={data} />
-      )}
     </div>
   );
-};
+}
 
 export default App;

@@ -1,6 +1,8 @@
 {
   "dependencies": {
+    "@types/axios": "^0.14.4",
     "antd": "^5.26.4",
+    "axios": "^1.10.0",
     "plotly.js": "^3.0.1",
     "react-plotly.js": "^2.6.0"
   }

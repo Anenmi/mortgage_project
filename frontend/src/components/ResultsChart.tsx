@@ -1,31 +1,108 @@
 import React, { useState, useEffect } from 'react';
 import Plot from 'react-plotly.js';
-import { Switch, InputNumber, Button } from 'antd';
-import { DownloadOutlined } from '@ant-design/icons';
+import { Switch, InputNumber, Slider, Spin } from 'antd';
 import { MortgageResult } from '../api/mortgage';
 import { ResultsTable } from './ResultsTable';
-import { calculateMortgage } from '../api/mortgage';
+import axios from 'axios';
 
-// Функция для форматирования чисел в миллионах
-const formatMillions = (value: number): string => {
-  const millions = value / 1000000;
-  if (millions >= 10) {
-    return millions % 1 === 0 ? `${Math.floor(millions)} млн` : `${millions.toFixed(1)} млн`;
-  } else {
-    return millions % 1 === 0 ? `${Math.floor(millions)} млн` : `${millions.toFixed(1)} млн`;
+// Общие стили и константы
+const COMMON_STYLES = {
+  legend: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 32,
+    marginBottom: 24,
+    marginTop: 8,
+    fontFamily: 'var(--main-font-family) !important',
+    fontSize: 13,
+    fontWeight: 500,
+    color: '#555',
+    background: 'rgba(255,255,255,0.8)',
+    borderRadius: 8,
+    border: '1px solid #e9ecef',
+    padding: '10px 24px',
+    width: 'fit-content',
+    marginLeft: 'auto',
+    marginRight: 'auto',
+    boxShadow: '0 2px 8px 0 rgba(30, 42, 73, 0.04)'
+  },
+  legendItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8
+  },
+  legendColorBox: (color: string, borderColor: string) => ({
+    width: 18,
+    height: 12,
+    background: color,
+    borderRadius: 3,
+    display: 'inline-block',
+    border: `1px solid ${borderColor}`
+  }),
+  switch: {
+    background: '#415a77',
+    minWidth: '44px',
+    height: '22px'
+  },
+  switchInactive: {
+    background: '#bfc4c9',
+    minWidth: '44px',
+    height: '22px'
+  },
+  slider: {
+    rail: { backgroundColor: '#e9ecef', height: 4 },
+    track: { backgroundColor: '#415a77', height: 4 },
+    handle: {
+      borderColor: '#415a77',
+      background: '#fff',
+      borderWidth: 2,
+      width: 10,
+      height: 10,
+      boxShadow: 'none',
+      borderRadius: '50%',
+      marginTop: 0
+    }
+  },
+  bar: {
+    width: 0.3,
+    textfont: { size: 9 },
+    insidetextanchor: 'middle',
+    hoverinfo: 'skip'
+  },
+  plot: {
+    margin: { l: 80, r: 40, t: 40, b: 40 },
+    plot_bgcolor: '#fff',
+    paper_bgcolor: '#fff',
+    showlegend: false
   }
 };
 
-// Функция для форматирования подписей оси X
-const formatXAxisTick = (value: number): string => {
-  const millions = value / 1000000;
-  return `${Math.floor(millions)} млн`;
+// Цвета для баров
+const BAR_COLORS = {
+  initial: { normal: '#a8dadc', low: '#d3d3d3', border: '#b5d6e0' },
+  principal: { normal: '#457b9d', low: '#e0e0e0', border: '#3a5c7d' },
+  overpayment: { normal: '#e63946', low: '#ededed', border: '#c92a36' }
 };
 
-// Функция для расчета процента от общей суммы
-const calculatePercentage = (value: number, total: number): string => {
-  return `${Math.round((value / total) * 100)}%`;
+// 2. Форматирование: оставить только нужные функции
+const formatMillions = (value: number): string => `${(value / 1_000_000).toFixed(1).replace(/\.0$/, '')} млн`;
+const formatRub = (value: number) => value.toLocaleString('ru-RU');
+const formatPercentage = (value: number, total: number): string => total ? `${Math.round((value / total) * 100)}%` : '0%';
+const formatYears = (years: number): string => {
+  if (years === 1) return '1 год';
+  if (years >= 2 && years <= 4) return `${years} года`;
+  return `${years} лет`;
 };
+
+// вспомогательный компонент для подписи под графиком
+function YearlyPaymentLabel({ value }: { value: number }) {
+  return (
+    <div style={{ textAlign: 'center', marginBottom: 0, color: '#1b263b', fontWeight: 500, fontSize: 15, fontFamily: 'var(--main-font-family) !important' }}>
+      (Платеж в год = <b>{formatRub(value * 12)}</b> руб.)
+    </div>
+  );
+}
 
 // Функция для создания альтернативных данных с измененным ежемесячным платежом
 const createAlternativeData = (
@@ -59,55 +136,173 @@ const createAlternativeData = (
   });
 };
 
+// Функция для создания базового бара
+const createBar = (y: number[], x: number[], name: string, color: string, text: string[], textColor: string = '#fff', opacity: number = 1) => ({
+  y,
+  x,
+  name,
+  type: 'bar' as const,
+  orientation: 'h' as const,
+  marker: { color },
+  text,
+  textposition: 'inside' as const,
+  textfont: { size: COMMON_STYLES.bar.textfont.size, color: textColor },
+  insidetextanchor: COMMON_STYLES.bar.insidetextanchor,
+  hoverinfo: COMMON_STYLES.bar.hoverinfo,
+  width: COMMON_STYLES.bar.width,
+  opacity
+});
+
 // Компонент для легенды
 const ChartLegend: React.FC<{ withInitial: boolean }> = ({ withInitial }) => (
-  <div style={{
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 32,
-    marginBottom: 24,
-    marginTop: 8,
-    fontFamily: 'var(--main-font-family) !important',
-    fontSize: 13,
-    fontWeight: 500,
-    color: '#555',
-    background: 'rgba(255,255,255,0.8)',
-    borderRadius: 8,
-    border: '1px solid #e9ecef',
-    padding: '10px 24px',
-    width: 'fit-content',
-    marginLeft: 'auto',
-    marginRight: 'auto',
-    boxShadow: '0 2px 8px 0 rgba(30, 42, 73, 0.04)'
-  }}>
+  <div style={COMMON_STYLES.legend}>
     {withInitial && (
-      <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ width: 18, height: 12, background: '#a8dadc', borderRadius: 3, display: 'inline-block', border: '1px solid #b5d6e0' }} />
+      <span style={COMMON_STYLES.legendItem}>
+        <span style={COMMON_STYLES.legendColorBox(BAR_COLORS.initial.normal, BAR_COLORS.initial.border)} />
         Первоначальный взнос
       </span>
     )}
-    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <span style={{ width: 18, height: 12, background: '#457b9d', borderRadius: 3, display: 'inline-block', border: '1px solid #3a5c7d' }} />
+    <span style={COMMON_STYLES.legendItem}>
+      <span style={COMMON_STYLES.legendColorBox(BAR_COLORS.principal.normal, BAR_COLORS.principal.border)} />
       Сумма кредита
     </span>
-    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <span style={{ width: 18, height: 12, background: '#e63946', borderRadius: 3, display: 'inline-block', border: '1px solid #c92a36' }} />
+    <span style={COMMON_STYLES.legendItem}>
+      <span style={COMMON_STYLES.legendColorBox(BAR_COLORS.overpayment.normal, BAR_COLORS.overpayment.border)} />
       Переплата по кредиту
     </span>
   </div>
 );
 
-export const ResultsChart: React.FC<{ data: MortgageResult[] }> = ({ data }) => {
+// Легенда для аннуитетного графика
+const AnnuityLegend: React.FC = () => (
+  <div style={COMMON_STYLES.legend}>
+    <span style={COMMON_STYLES.legendItem}>
+      <span style={COMMON_STYLES.legendColorBox(BAR_COLORS.overpayment.normal, BAR_COLORS.overpayment.border)} />
+      Проценты
+    </span>
+    <span style={COMMON_STYLES.legendItem}>
+      <span style={COMMON_STYLES.legendColorBox(BAR_COLORS.principal.normal, BAR_COLORS.principal.border)} />
+      Тело кредита
+    </span>
+  </div>
+);
+
+// Новый компонент для блока сравнения
+const CompareParamsBlock: React.FC<{
+  altRate: number;
+  altInitial: number;
+  altMonthly: number;
+  setAltRate: (v: number) => void;
+  setAltInitial: (v: number) => void;
+  setAltMonthly: (v: number) => void;
+  mainRate: number;
+  mainInitial: number;
+  mainMonthly: number;
+}> = ({ altRate, altInitial, altMonthly, setAltRate, setAltInitial, setAltMonthly, mainRate, mainInitial, mainMonthly }) => (
+  <div style={{ background: '#f8f9fa', border: '1px solid #e9ecef', borderRadius: 8, padding: '20px 28px', display: 'inline-block', fontSize: 14, color: '#415a77', boxShadow: '0 1px 4px 0 rgba(30, 42, 73, 0.04)', width: 576, minWidth: 576, marginBottom: 24 }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontWeight: 600, fontSize: 14, marginBottom: 18, color: '#1b263b' }}>
+      <span>Изменить параметры для сравнения:</span>
+      <button
+        type="button"
+        style={{ marginLeft: 16, padding: '4px 14px', fontSize: 13, borderRadius: 6, border: '1px solid #bfc4c9', background: '#fff', color: '#1b263b', fontWeight: 500, cursor: 'pointer', transition: 'background 0.2s' }}
+        onClick={() => {
+          setAltRate(mainRate);
+          setAltInitial(mainInitial);
+          setAltMonthly(mainMonthly);
+        }}
+      >
+        Сбросить
+      </button>
+    </div>
+    <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+      {[{
+        label: 'Ставка',
+        value: altRate,
+        onChange: (v: number | null) => setAltRate(v ?? mainRate),
+        min: 0.01,
+        max: 99,
+        step: 0.01,
+        main: mainRate,
+        isPercent: true,
+        formatter: (v: any) => `${v}`.replace('.', ','),
+        parser: (v: any) => Number((v || '').toString().replace(',', '.')),
+      }, {
+        label: 'Первоначальный взнос',
+        value: altInitial,
+        onChange: (v: number | null) => setAltInitial(v ?? mainInitial),
+        min: 0,
+        step: 10000,
+        main: mainInitial,
+        isPercent: false,
+        formatter: (v: any) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' '),
+        parser: (v: any) => Number((v || '').toString().replace(/\s/g, '')),
+      }, {
+        label: 'Ежемесячный платёж',
+        value: altMonthly,
+        onChange: (v: number | null) => setAltMonthly(v ?? mainMonthly),
+        min: 1000,
+        step: 1000,
+        main: mainMonthly,
+        isPercent: false,
+        formatter: (v: any) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' '),
+        parser: (v: any) => Number((v || '').toString().replace(/\s/g, '')),
+      }].map((field, idx) => {
+        const diff = field.value - field.main;
+        let diffText = null;
+        if (diff !== 0) {
+          const isIncrease = diff > 0;
+          const sign = isIncrease ? 'увеличен' : 'уменьшен';
+          const color = isIncrease ? '#2e7d32' : '#e63946';
+          if (field.isPercent) {
+            diffText = (
+              <div style={{ fontSize: 12, color, fontWeight: 500, marginTop: 2 }}>
+                {field.label} {sign} на {Math.abs(diff).toLocaleString('ru-RU').replace('.', ',')}%
+              </div>
+            );
+          } else {
+            diffText = (
+              <div style={{ fontSize: 12, color, fontWeight: 500, marginTop: 2 }}>
+                {field.label} {sign} на {Math.abs(diff).toLocaleString('ru-RU')} руб.
+              </div>
+            );
+          }
+        }
+        return (
+          <div key={field.label} style={{ display: 'flex', flexDirection: 'column', width: 180, minWidth: 180, marginBottom: 0, height: 85 }}>
+            <label style={{ fontSize: 12, color: '#888', marginBottom: 2, fontWeight: 400 }}>{field.label}</label>
+            <InputNumber
+              min={field.min}
+              max={field.max}
+              step={field.step}
+              value={field.value}
+              onChange={field.onChange}
+              formatter={field.formatter}
+              parser={field.parser}
+              style={{ width: '100%', borderRadius: 6, fontSize: 15, border: '1px solid #bfc4c9', background: '#fff', height: 38, paddingLeft: 10 }}
+            />
+            {diffText}
+          </div>
+        );
+      })}
+    </div>
+  </div>
+);
+
+export const ResultsChart: React.FC<{ data: MortgageResult[], mainRate: number }> = ({ data, mainRate }) => {
   const [withInitial, setWithInitial] = useState(true);
   // Альтернативные параметры (по умолчанию — из первого элемента data)
-  // Если в объекте нет поля rate, используем 0.165
   const mainInitial = data[0]?.initial_payment ?? 0;
   const mainMonthly = data[0]?.monthly_payment ?? 0;
-  const mainRate = typeof (data[0] as any)?.rate === 'number' ? (data[0] as any).rate * 100 : 16.5;
   const [altRate, setAltRate] = useState(mainRate);
   const [altInitial, setAltInitial] = useState(mainInitial);
   const [altMonthly, setAltMonthly] = useState(mainMonthly);
+
+  // Сброс альтернативных параметров при изменении основных
+  useEffect(() => {
+    setAltRate(mainRate);
+    setAltInitial(mainInitial);
+    setAltMonthly(mainMonthly);
+  }, [mainRate, mainInitial, mainMonthly]);
 
   // Новое состояние для таблицы
   const [tableData, setTableData] = useState<MortgageResult[]>([]);
@@ -124,10 +319,64 @@ export const ResultsChart: React.FC<{ data: MortgageResult[] }> = ({ data }) => 
       min_years,
       max_years,
       min_initial_payment_percentage: data[0]?.min_initial_payment_percentage ?? 20,
-      step: 1, // Явно указываем шаг 1 для таблицы
+      step: 1
     };
-    calculateMortgage(params).then(setTableData);
+    // calculateMortgage(params).then(setTableData); // This line was removed as per the edit hint
   }, [data, mainRate, mainMonthly, mainInitial]);
+
+  // Для аннуитетного графика
+  const minYears = Math.min(...data.map(d => d.years));
+  const maxYears = Math.max(...data.map(d => d.years));
+  const [annuityYears, setAnnuityYears] = useState(minYears);
+  const [annuityLoading, setAnnuityLoading] = useState(false);
+  const [annuityPlotData, setAnnuityPlotData] = useState<any[] | null>(null);
+  const [annuityPlotLayout, setAnnuityPlotLayout] = useState<any | null>(null);
+  const [annuityMode, setAnnuityMode] = useState<'months' | 'years'>('years');
+
+  useEffect(() => {
+    setAnnuityYears(minYears);
+  }, [minYears, data]);
+
+  // Параметры для запроса
+  const mainParams = {
+    interest_rate: mainRate,
+    monthly_payment: mainMonthly,
+    initial_payment: mainInitial,
+    min_initial_payment_percentage: data[0]?.min_initial_payment_percentage ?? 20,
+  };
+
+  useEffect(() => {
+    if (!data.length) return;
+    setAnnuityLoading(true);
+    axios.post('http://localhost:5000/api/annuity_payments', { ...mainParams, years: annuityYears, mode: annuityMode })
+      .then((res) => {
+        setAnnuityPlotData(res.data.data);
+        setAnnuityPlotLayout(res.data.layout);
+      })
+      .finally(() => setAnnuityLoading(false));
+  }, [annuityYears, mainMonthly, mainInitial, mainRate, annuityMode, data]);
+
+  // --- Новый аннуитетный график с изменёнными параметрами ---
+  const [altAnnuityPlotData, setAltAnnuityPlotData] = useState<any[] | null>(null);
+  const [altAnnuityPlotLayout, setAltAnnuityPlotLayout] = useState<any | null>(null);
+  const [altAnnuityLoading, setAltAnnuityLoading] = useState(false);
+  useEffect(() => {
+    if (!data.length) return;
+    setAltAnnuityLoading(true);
+    axios.post('http://localhost:5000/api/annuity_payments', {
+      interest_rate: altRate,
+      monthly_payment: altMonthly,
+      initial_payment: altInitial,
+      min_initial_payment_percentage: data[0]?.min_initial_payment_percentage ?? 20,
+      years: annuityYears,
+      mode: annuityMode
+    })
+      .then((res) => {
+        setAltAnnuityPlotData(res.data.data);
+        setAltAnnuityPlotLayout(res.data.layout);
+      })
+      .finally(() => setAltAnnuityLoading(false));
+  }, [altRate, altInitial, altMonthly, annuityYears, annuityMode, data]);
 
   if (!data.length) return null;
   
@@ -150,103 +399,72 @@ export const ResultsChart: React.FC<{ data: MortgageResult[] }> = ({ data }) => 
             const actualPct = total > 0 ? (value / total) * 100 : 0; // Без округления для сравнения
             const minPct = (dataSource[index] as any).min_initial_payment_percentage ?? 0;
             const isTooLow = actualPct < minPct;
-            return {
-              y: [yPositions[index]],
-              x: [value],
-              name: 'Первоначальный взнос',
-              type: 'bar',
-              orientation: 'h',
-              marker: { color: isTooLow ? '#d3d3d3' : '#a8dadc' },
-              text: [`${formatMillions(value)}<br><b>${Math.round(actualPct)}%</b>`], // Округление только для вывода
-              textposition: 'inside',
-              textfont: { size: 10, color: isTooLow ? '#aaa' : '#333' },
-              insidetextanchor: 'middle',
-              hoverinfo: 'skip',
-              width: 0.4,
-              opacity: isTooLow ? 0.7 : 1,
-              customdata: [{ isTooLow }],
-            };
+            return createBar(
+              [yPositions[index]],
+              [value],
+              'Первоначальный взнос',
+              isTooLow ? BAR_COLORS.initial.low : BAR_COLORS.initial.normal,
+              [`${formatMillions(value)}<br><i>${Math.round(actualPct)}%</i>`],
+              isTooLow ? '#aaa' : '#333',
+              isTooLow ? 0.7 : 1
+            );
           }),
           ...principal.map((value, index) => {
             const total = initial[index] + principal[index];
             const actualPct = total > 0 ? (initial[index] / total) * 100 : 0;
             const minPct = (dataSource[index] as any).min_initial_payment_percentage ?? 0;
             const isTooLow = actualPct <= minPct;
-            return {
-              y: [yPositions[index]],
-              x: [value],
-              name: 'Сумма кредита',
-              type: 'bar',
-              orientation: 'h',
-              marker: { color: isTooLow ? '#e0e0e0' : '#457b9d' },
-              text: [`${formatMillions(value)}<br><b>${calculatePercentage(value, totalPayments[index])}</b>`],
-              textposition: 'inside',
-              textfont: { size: 10, color: isTooLow ? '#bbb' : '#fff' },
-              insidetextanchor: 'middle',
-              hoverinfo: 'skip',
-              width: 0.4,
-              opacity: isTooLow ? 0.7 : 1,
-              customdata: [{ isTooLow }],
-            };
+            return createBar(
+              [yPositions[index]],
+              [value],
+              'Сумма кредита',
+              isTooLow ? BAR_COLORS.principal.low : BAR_COLORS.principal.normal,
+              [`${formatMillions(value)}<br><i>${formatPercentage(value, totalPayments[index])}</i>`],
+              isTooLow ? '#bbb' : '#fff',
+              isTooLow ? 0.7 : 1
+            );
           }),
           ...overpay.map((value, index) => {
             const total = initial[index] + principal[index];
             const actualPct = total > 0 ? (initial[index] / total) * 100 : 0;
             const minPct = (dataSource[index] as any).min_initial_payment_percentage ?? 0;
             const isTooLow = actualPct <= minPct;
-            return {
-              y: [yPositions[index]],
-              x: [value],
-              name: 'Переплата по кредиту',
-              type: 'bar',
-              orientation: 'h',
-              marker: { color: isTooLow ? '#ededed' : '#e63946' },
-              text: [`${formatMillions(value)}<br><b>${calculatePercentage(value, totalPayments[index])}</b>`],
-              textposition: 'inside',
-              textfont: { size: 10, color: isTooLow ? '#ccc' : '#fff' },
-              insidetextanchor: 'middle',
-              hoverinfo: 'skip',
-              width: 0.4,
-              opacity: isTooLow ? 0.7 : 1,
-              customdata: [{ isTooLow }],
-            };
+            return createBar(
+              [yPositions[index]],
+              [value],
+              'Переплата по кредиту',
+              isTooLow ? BAR_COLORS.overpayment.low : BAR_COLORS.overpayment.normal,
+              [`${formatMillions(value)}<br><i>${formatPercentage(value, totalPayments[index])}</i>`],
+              isTooLow ? '#ccc' : '#fff',
+              isTooLow ? 0.7 : 1
+            );
           }),
         ]
       : [
-          {
-            y: yPositions,
-            x: principal,
-            name: 'Сумма кредита',
-            type: 'bar',
-            orientation: 'h',
-            marker: { color: '#457b9d' },
-            text: principal.map((value, index) => {
+          createBar(
+            yPositions,
+            principal,
+            'Сумма кредита',
+            BAR_COLORS.principal.normal,
+            principal.map((value, index) => {
               const total = principal[index] + overpay[index];
-              return `${formatMillions(value)}<br><b>${calculatePercentage(value, total)}</b>`;
+              return `${formatMillions(value)}<br><i>${formatPercentage(value, total)}</i>`;
             }),
-            textposition: 'inside',
-            textfont: { size: 10, color: '#fff' },
-            insidetextanchor: 'middle',
-            hoverinfo: 'skip',
-            width: 0.4
-          },
-          {
-            y: yPositions,
-            x: overpay,
-            name: 'Переплата по кредиту',
-            type: 'bar',
-            orientation: 'h',
-            marker: { color: '#e63946' },
-            text: overpay.map((value, index) => {
+            '#fff',
+            1
+          ),
+          createBar(
+            yPositions,
+            overpay,
+            'Переплата по кредиту',
+            BAR_COLORS.overpayment.normal,
+            overpay.map((value, index) => {
               const total = principal[index] + overpay[index];
-              return `${formatMillions(value)}<br><b>${calculatePercentage(value, total)}</b>`;
+              return `${formatMillions(value)}<br><i>${formatPercentage(value, total)}</i>`;
             }),
-            textposition: 'inside',
-            textfont: { size: 10, color: '#fff' },
-            insidetextanchor: 'middle',
-            hoverinfo: 'skip',
-            width: 0.4
-          }
+            '#fff',
+            1
+          )
         ];
   };
 
@@ -310,7 +528,7 @@ export const ResultsChart: React.FC<{ data: MortgageResult[] }> = ({ data }) => 
         const isTooLow = actualPct <= minPct;
         return {
           x: value / 2,
-          y: yPositions[index] - 0.3,
+          y: yPositions[index] - 0.2,
           text: `Стоимость жилья: <b>${formatMillions(value)}</b>`,
           showarrow: false,
           font: { size: 11, color: isTooLow ? '#bbb' : '#555' },
@@ -322,32 +540,39 @@ export const ResultsChart: React.FC<{ data: MortgageResult[] }> = ({ data }) => 
           opacity: isTooLow ? 0.6 : 1
         };
       }));
-      bracketShapes.push(...bracketValue.map((value, index) => [
-        {
-          type: 'line',
-          x0: 0,
-          x1: value,
-          y0: yPositions[index] - 0.3,
-          y1: yPositions[index] - 0.3,
-          line: { color: '#555', width: 0.5 }
-        },
-        {
-          type: 'line',
-          x0: 0,
-          x1: 0,
-          y0: yPositions[index] - 0.3,
-          y1: yPositions[index] - 0.2,
-          line: { color: '#555', width: 0.5 }
-        },
-        {
-          type: 'line',
-          x0: value,
-          x1: value,
-          y0: yPositions[index] - 0.3,
-          y1: yPositions[index] - 0.2,
-          line: { color: '#555', width: 0.5 }
-        }
-      ]).flat());
+      bracketShapes.push(...bracketValue.map((value, index) => {
+        const total = initial[index] + principal[index];
+        const actualPct = total > 0 ? (initial[index] / total) * 100 : 0;
+        const minPct = (dataSource[index] as any).min_initial_payment_percentage ?? 0;
+        const isTooLow = actualPct <= minPct;
+        const bracketColor = isTooLow ? '#bbb' : '#555';
+        return [
+          {
+            type: 'line',
+            x0: 0,
+            x1: value,
+            y0: yPositions[index] - 0.2,
+            y1: yPositions[index] - 0.2,
+            line: { color: bracketColor, width: 0.5 }
+          },
+          {
+            type: 'line',
+            x0: 0,
+            x1: 0,
+            y0: yPositions[index] - 0.2,
+            y1: yPositions[index] - 0.15,
+            line: { color: bracketColor, width: 0.5 }
+          },
+          {
+            type: 'line',
+            x0: value,
+            x1: value,
+            y0: yPositions[index] - 0.2,
+            y1: yPositions[index] - 0.15,
+            line: { color: bracketColor, width: 0.5 }
+          }
+        ];
+      }).flat());
 
       // --- Новая скобка и подпись для первоначального взноса ---
       bracketAnnotations.push(...initial.map((init, index) => {
@@ -358,13 +583,13 @@ export const ResultsChart: React.FC<{ data: MortgageResult[] }> = ({ data }) => 
         const isTooLow = percentRaw < minPct;
         return {
           x: init / 2,
-          y: yPositions[index] + 0.3,
+          y: yPositions[index] + 0.25,
           text: isTooLow 
-            ? `Первоначальный взнос: <b>${percent}%</b>`
+            ? `Первоначальный взнос: <b>${percent}%</b> (недостаточно)`
             : `Первоначальный взнос: <b>${percent}%</b>`,
           showarrow: false,
           font: { size: 11, color: isTooLow ? '#ff5252' : '#555' },
-          xanchor: 'center',
+          xanchor: 'left',
           yanchor: 'top',
           bgcolor: 'rgba(255,255,255,0)',
           bordercolor: 'rgba(255,255,255,0)',
@@ -374,9 +599,10 @@ export const ResultsChart: React.FC<{ data: MortgageResult[] }> = ({ data }) => 
       }));
       bracketShapes.push(...initial.map((init, index) => {
         const total = initial[index] + principal[index];
-        const percent = total > 0 ? Math.round((init / total) * 100) : 0;
+        const percentRaw = total > 0 ? (init / total) * 100 : 0;
         const minPct = (dataSource[index] as any).min_initial_payment_percentage ?? 0;
-        const isTooLow = percent <= minPct;
+        const isTooLow = percentRaw < minPct;
+        const percent = Math.round(percentRaw); // Округление только для вывода
         const baseColor = isTooLow ? '#f0f0f0' : '#555';
         const opacity = isTooLow ? 0.4 : 1;
         const shapes = [
@@ -384,8 +610,8 @@ export const ResultsChart: React.FC<{ data: MortgageResult[] }> = ({ data }) => 
             type: 'line',
             x0: 0,
             x1: init,
-            y0: yPositions[index] + 0.3,
-            y1: yPositions[index] + 0.3,
+            y0: yPositions[index] + 0.25,
+            y1: yPositions[index] + 0.25,
             line: { color: baseColor, width: 0.5 },
             opacity
           },
@@ -393,8 +619,8 @@ export const ResultsChart: React.FC<{ data: MortgageResult[] }> = ({ data }) => 
             type: 'line',
             x0: 0,
             x1: 0,
-            y0: yPositions[index] + 0.3,
-            y1: yPositions[index] + 0.2,
+            y0: yPositions[index] + 0.25,
+            y1: yPositions[index] + 0.15,
             line: { color: baseColor, width: 0.5 },
             opacity
           },
@@ -402,8 +628,8 @@ export const ResultsChart: React.FC<{ data: MortgageResult[] }> = ({ data }) => 
             type: 'line',
             x0: init,
             x1: init,
-            y0: yPositions[index] + 0.3,
-            y1: yPositions[index] + 0.2,
+            y0: yPositions[index] + 0.25,
+            y1: yPositions[index] + 0.15,
             line: { color: baseColor, width: 0.5 },
             opacity
           }
@@ -444,7 +670,7 @@ export const ResultsChart: React.FC<{ data: MortgageResult[] }> = ({ data }) => 
         const isTooLow = actualPct <= minPct;
         return {
           x: annotationX,
-          y: yPositions[index] - 0.45,
+          y: yPositions[index] - 0.3,
           text: `Переплата за кредит: <b>${perc}%</b>`,
           showarrow: false,
           font: { size: 11, color: isTooLow ? '#bbb' : '#555' },
@@ -461,7 +687,7 @@ export const ResultsChart: React.FC<{ data: MortgageResult[] }> = ({ data }) => 
         annotationX = bracketStart + (bracketEnd - bracketStart) / 2;
         return {
           x: annotationX,
-          y: yPositions[index] - 0.45,
+          y: yPositions[index] - 0.3,
           text: `Переплата за кредит: <b>${perc}%</b>`,
           showarrow: false,
           font: { size: 11, color: '#555' },
@@ -477,37 +703,43 @@ export const ResultsChart: React.FC<{ data: MortgageResult[] }> = ({ data }) => 
     
     const overpayBracketShapes = overpayPercentages.map((perc, index) => {
       let bracketStart, bracketEnd;
+      let isTooLow = false;
       if (withInitialToggle) {
         bracketStart = initial[index] + principal[index];
         bracketEnd = initial[index] + principal[index] + overpay[index];
+        const total = initial[index] + principal[index];
+        const actualPct = total > 0 ? (initial[index] / total) * 100 : 0;
+        const minPct = (dataSource[index] as any).min_initial_payment_percentage ?? 0;
+        isTooLow = actualPct <= minPct;
       } else {
         bracketStart = principal[index];
         bracketEnd = principal[index] + overpay[index];
       }
+      const bracketColor = isTooLow ? '#bbb' : '#555';
       return [
         {
           type: 'line',
           x0: bracketStart,
           x1: bracketEnd,
-          y0: yPositions[index] - 0.45,
-          y1: yPositions[index] - 0.45,
-          line: { color: '#555', width: 0.5 }
+          y0: yPositions[index] - 0.3,
+          y1: yPositions[index] - 0.3,
+          line: { color: bracketColor, width: 0.5 }
         },
         {
           type: 'line',
           x0: bracketStart,
           x1: bracketStart,
-          y0: yPositions[index] - 0.45,
-          y1: yPositions[index] - 0.2,
-          line: { color: '#555', width: 0.5 }
+          y0: yPositions[index] - 0.3,
+          y1: yPositions[index] - 0.15,
+          line: { color: bracketColor, width: 0.5 }
         },
         {
           type: 'line',
           x0: bracketEnd,
           x1: bracketEnd,
-          y0: yPositions[index] - 0.45,
-          y1: yPositions[index] - 0.2,
-          line: { color: '#555', width: 0.5 }
+          y0: yPositions[index] - 0.3,
+          y1: yPositions[index] - 0.15,
+          line: { color: bracketColor, width: 0.5 }
         }
       ];
     }).flat();
@@ -593,6 +825,14 @@ export const ResultsChart: React.FC<{ data: MortgageResult[] }> = ({ data }) => 
   const chartData1 = createChartData(data, withInitial);
   const chartData2 = createChartData(alternativeData, withInitial);
   
+  // Создаем массивы общих платежей для hover данных
+  const totalPayments1 = withInitial 
+    ? data.map(d => d.total_payment)
+    : data.map(d => d.principal + d.overpayment);
+  const totalPayments2 = withInitial 
+    ? alternativeData.map(d => d.total_payment)
+    : alternativeData.map(d => d.principal + d.overpayment);
+  
   // Создаем аннотации для обоих графиков с фиксированным отступом
   const annotations1 = createAnnotationsWithFixedOffset(data, withInitial);
   const annotations2 = createAnnotationsWithFixedOffset(alternativeData, withInitial);
@@ -614,7 +854,7 @@ export const ResultsChart: React.FC<{ data: MortgageResult[] }> = ({ data }) => 
     const labels = [];
     for (let i = 0; i <= maxValue; i += step) {
       ticks.push(i);
-      labels.push(formatXAxisTick(i));
+      labels.push(formatMillions(i));
     }
     return { ticks, labels };
   };
@@ -624,14 +864,6 @@ export const ResultsChart: React.FC<{ data: MortgageResult[] }> = ({ data }) => 
   const maxValue2 = Math.max(...alternativeData.map(d => d.total_payment));
   const { ticks: xAxisTicks1, labels: xAxisLabels1 } = getXAxisTicksAndLabels(maxValue1);
   const { ticks: xAxisTicks2, labels: xAxisLabels2 } = getXAxisTicksAndLabels(maxValue2);
-
-  // Функция для форматирования чисел с пробелами
-  const formatRub = (value: number) => value.toLocaleString('ru-RU');
-
-  // Для левого графика: минимальный ежемесячный платеж из data
-  const minMonthlyPayment1 = Math.min(...data.map(d => d.monthly_payment));
-  // Для правого графика: минимальный ежемесячный платеж из alternativeData
-  const minMonthlyPayment2 = Math.min(...alternativeData.map(d => d.monthly_payment));
 
   // Функция для форматирования разницы
   const formatDiff = (alt: number, main: number, isPercent = false) => {
@@ -648,6 +880,33 @@ export const ResultsChart: React.FC<{ data: MortgageResult[] }> = ({ data }) => 
       </div>
     );
   };
+
+  // Общий Plotly config для всех графиков
+  const plotlyConfig = {
+    responsive: true,
+    displayModeBar: true,
+    modeBarButtonsToRemove: [
+      'zoom2d', 'pan2d', 'select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d',
+      'hoverClosestCartesian', 'hoverCompareCartesian', 'toggleSpikelines',
+      'sendDataToCloud', 'toggleHover', 'resetViews', 'resetViewMapbox', 'zoomInGeo', 'zoomOutGeo',
+      'resetGeo', 'hoverClosestGeo', 'hoverClosestGl2d', 'hoverClosestPie', 'resetViewSankey',
+      'resetViewTernary', 'hoverClosestTernary', 'hoverClosestMapbox', 'zoomInMapbox', 'zoomOutMapbox',
+      'resetViewMapbox', 'hoverClosestScatter3d', 'hoverClosestMesh3d', 'resetCameraDefault3d',
+      'resetCameraLastSave3d', 'hoverClosestGl2d', 'hoverClosestPie', 'toggleHover', 'resetViews'
+    ],
+    toImageButtonOptions: {
+      format: 'png',
+      filename: 'график',
+      height: 600,
+      width: 1200,
+      scale: 2
+    }
+  };
+
+  // Функция для форматирования миллионов с фиксированным количеством знаков после запятой
+  function formatMillionsFixed(val: number): string {
+    return `${(val / 1_000_000).toFixed(1).replace('.', ',')} млн`;
+  }
 
   return (
     <div style={{ width: '100%', maxWidth: 2000, margin: '0 auto' }}>
@@ -679,103 +938,25 @@ export const ResultsChart: React.FC<{ data: MortgageResult[] }> = ({ data }) => 
           <span style={{ fontWeight: 'bold', fontSize: 15, color: '#1b263b', marginRight: 12, fontFamily: 'var(--main-font-family) !important' }} className="mortgage-form-label">
             Учитывать первоначальный взнос
           </span>
-          <Switch checked={withInitial} onChange={setWithInitial} style={{ background: withInitial ? '#415a77' : '#bfc4c9' }} />
+          <Switch 
+            checked={withInitial} 
+            onChange={setWithInitial} 
+            style={withInitial ? COMMON_STYLES.switch : COMMON_STYLES.switchInactive} 
+          />
         </div>
         {/* Форма и пояснительный блок */}
-        <div style={{ display: 'flex', gap: 32, alignItems: 'flex-start', marginBottom: 24 }}>
-          {/* Форма параметров (оставить как есть) */}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            {/* Блок Изменить параметры для сравнения */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
-              <div style={{
-                background: '#f8f9fa',
-                border: '1px solid #e9ecef',
-                borderRadius: 8,
-                padding: '20px 28px',
-                display: 'inline-block',
-                fontSize: 14,
-                color: '#415a77',
-                boxShadow: '0 1px 4px 0 rgba(30, 42, 73, 0.04)',
-                width: 576,
-                minWidth: 576
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontWeight: 600, fontSize: 14, marginBottom: 18, color: '#1b263b' }}>
-                  <span>Изменить параметры для сравнения:</span>
-                  <button
-                    type="button"
-                    style={{
-                      marginLeft: 16,
-                      padding: '4px 14px',
-                      fontSize: 13,
-                      borderRadius: 6,
-                      border: '1px solid #bfc4c9',
-                      background: '#fff',
-                      color: '#1b263b',
-                      fontWeight: 500,
-                      cursor: 'pointer',
-                      transition: 'background 0.2s',
-                    }}
-                    onClick={() => {
-                      setAltRate(mainRate);
-                      setAltInitial(mainInitial);
-                      setAltMonthly(mainMonthly);
-                    }}
-                  >
-                    Сбросить
-                  </button>
-                </div>
-                <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                  {[{
-                    label: 'Ставка',
-                    value: altRate,
-                    onChange: (v: number | null) => setAltRate(v ?? mainRate),
-                    min: 0.01,
-                    max: 99,
-                    step: 0.01,
-                    main: mainRate,
-                    isPercent: true,
-                    formatter: (v: any) => `${v}`.replace('.', ','),
-                    parser: (v: any) => Number((v || '').toString().replace(',', '.')),
-                  }, {
-                    label: 'Первоначальный взнос',
-                    value: altInitial,
-                    onChange: (v: number | null) => setAltInitial(v ?? mainInitial),
-                    min: 0,
-                    step: 10000,
-                    main: mainInitial,
-                    isPercent: false,
-                    formatter: (v: any) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' '),
-                    parser: (v: any) => Number((v || '').toString().replace(/\s/g, '')),
-                  }, {
-                    label: 'Ежемесячный платёж',
-                    value: altMonthly,
-                    onChange: (v: number | null) => setAltMonthly(v ?? mainMonthly),
-                    min: 1000,
-                    step: 1000,
-                    main: mainMonthly,
-                    isPercent: false,
-                    formatter: (v: any) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' '),
-                    parser: (v: any) => Number((v || '').toString().replace(/\s/g, '')),
-                  }].map((field, idx) => (
-                    <div key={field.label} style={{ display: 'flex', flexDirection: 'column', width: 180, minWidth: 180, marginBottom: 0, height: 85 }}>
-                      <label style={{ fontSize: 12, color: '#888', marginBottom: 2, fontWeight: 400 }}>{field.label}</label>
-                      <InputNumber
-                        min={field.min}
-                        max={field.max}
-                        step={field.step}
-                        value={field.value}
-                        onChange={field.onChange}
-                        formatter={field.formatter}
-                        parser={field.parser}
-                        style={{ width: '100%', borderRadius: 6, fontSize: 15, border: '1px solid #bfc4c9', background: '#fff', height: 38, paddingLeft: 10 }}
-                      />
-                      {formatDiff(field.value, field.main, field.isPercent)}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 24 }}>
+          <CompareParamsBlock
+            altRate={altRate}
+            altInitial={altInitial}
+            altMonthly={altMonthly}
+            setAltRate={setAltRate}
+            setAltInitial={setAltInitial}
+            setAltMonthly={setAltMonthly}
+            mainRate={mainRate}
+            mainInitial={mainInitial}
+            mainMonthly={mainMonthly}
+          />
         </div>
         {/* Блок с заголовками к каждому графику */}
         <div style={{ display: 'flex', gap: 4, justifyContent: 'center', marginBottom: 0 }}>
@@ -793,14 +974,10 @@ export const ResultsChart: React.FC<{ data: MortgageResult[] }> = ({ data }) => 
         {/* Блок с описанием параметров к каждому графику */}
         <div style={{ display: 'flex', gap: 4, justifyContent: 'center', marginBottom: 8 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ textAlign: 'center', marginBottom: 0, color: '#1b263b', fontWeight: 500, fontSize: 15, fontFamily: 'var(--main-font-family) !important' }}>
-              (Платеж в год = <b>{formatRub(minMonthlyPayment1 * 12)}</b> руб.)
-            </div>
+            <YearlyPaymentLabel value={mainMonthly} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ textAlign: 'center', marginBottom: 0, color: '#1b263b', fontWeight: 500, fontSize: 15, fontFamily: 'var(--main-font-family) !important' }}>
-              (Платеж в год = <b>{formatRub(minMonthlyPayment2 * 12)}</b> руб.)
-            </div>
+            <YearlyPaymentLabel value={altMonthly} />
           </div>
         </div>
         {/* Легенда */}
@@ -810,7 +987,14 @@ export const ResultsChart: React.FC<{ data: MortgageResult[] }> = ({ data }) => 
           <div style={{ flex: 1, minWidth: 0 }}>
             <Plot
               divId="plot1"
-              data={chartData1}
+              data={chartData1.map(trace => ({
+                ...trace,
+                customdata: trace.x.map((val: number, i: number) => {
+                  const totalPayment = totalPayments1[trace.y[i]];
+                  return [Math.round(val / totalPayment * 100), Math.round(val)];
+                }),
+                hovertemplate: '%{customdata[0]}%<br>%{customdata[1]:,} руб.'
+              }))}
               style={{ width: '98%', margin: 0 }}
               layout={{
                 barmode: 'stack',
@@ -832,42 +1016,30 @@ export const ResultsChart: React.FC<{ data: MortgageResult[] }> = ({ data }) => 
                   autorange: 'reversed',
                   tickmode: 'array',
                   tickvals: data.map((_, index) => index),
-                  ticktext: data.map(d => `${d.years} лет`)
+                  ticktext: data.map(d => `${formatYears(d.years)}`)
                 },
-                height: Math.max(400, 100 * data.length),
-                margin: { l: 80, r: 40, t: 40, b: 40 },
-                plot_bgcolor: '#fff',
-                paper_bgcolor: '#fff',
+                height: Math.max(400, 140 * data.length),
+                margin: COMMON_STYLES.plot.margin,
+                plot_bgcolor: COMMON_STYLES.plot.plot_bgcolor,
+                paper_bgcolor: COMMON_STYLES.plot.paper_bgcolor,
                 annotations: [...annotations1.rightAnnotations, ...annotations1.bracketAnnotations],
                 shapes: [...annotations1.bracketShapes],
                 showlegend: false
               }}
-              config={{
-                responsive: true,
-                displayModeBar: true,
-                modeBarButtonsToRemove: [
-                  'zoom2d', 'pan2d', 'select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d',
-                  'hoverClosestCartesian', 'hoverCompareCartesian', 'toggleSpikelines',
-                  'sendDataToCloud', 'toggleHover', 'resetViews', 'resetViewMapbox', 'zoomInGeo', 'zoomOutGeo',
-                  'resetGeo', 'hoverClosestGeo', 'hoverClosestGl2d', 'hoverClosestPie', 'toggleHover', 'resetViewSankey',
-                  'resetViewTernary', 'hoverClosestTernary', 'hoverClosestMapbox', 'zoomInMapbox', 'zoomOutMapbox',
-                  'resetViewMapbox', 'hoverClosestScatter3d', 'hoverClosestMesh3d', 'resetCameraDefault3d',
-                  'resetCameraLastSave3d', 'hoverClosestGl2d', 'hoverClosestPie', 'toggleHover', 'resetViews'
-                ],
-                toImageButtonOptions: {
-                  format: 'png',
-                  filename: 'текущая_структура_выплат',
-                  height: 600,
-                  width: 1200,
-                  scale: 2
-                }
-              }}
+              config={plotlyConfig}
             />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <Plot
               divId="plot2"
-              data={chartData2}
+              data={chartData2.map(trace => ({
+                ...trace,
+                customdata: trace.x.map((val: number, i: number) => {
+                  const totalPayment = totalPayments2[trace.y[i]];
+                  return [Math.round(val / totalPayment * 100), Math.round(val)];
+                }),
+                hovertemplate: '%{customdata[0]}%<br>%{customdata[1]:,} руб.'
+              }))}
               style={{ width: '98%', margin: 0 }}
               layout={{
                 barmode: 'stack',
@@ -889,41 +1061,218 @@ export const ResultsChart: React.FC<{ data: MortgageResult[] }> = ({ data }) => 
                   autorange: 'reversed',
                   tickmode: 'array',
                   tickvals: alternativeData.map((_, index) => index),
-                  ticktext: alternativeData.map(d => `${d.years} лет`)
+                  ticktext: alternativeData.map(d => `${formatYears(d.years)}`)
                 },
-                height: Math.max(400, 100 * alternativeData.length),
-                margin: { l: 80, r: 40, t: 40, b: 40 },
-                plot_bgcolor: '#fff',
-                paper_bgcolor: '#fff',
+                height: Math.max(400, 140 * alternativeData.length),
+                margin: COMMON_STYLES.plot.margin,
+                plot_bgcolor: COMMON_STYLES.plot.plot_bgcolor,
+                paper_bgcolor: COMMON_STYLES.plot.paper_bgcolor,
                 annotations: [...annotations2.rightAnnotations, ...annotations2.bracketAnnotations],
                 shapes: [...annotations2.bracketShapes],
                 showlegend: false
               }}
-              config={{
-                responsive: true,
-                displayModeBar: true,
-                modeBarButtonsToRemove: [
-                  'zoom2d', 'pan2d', 'select2d', 'lasso2d', 'zoomIn2d', 'zoomOut2d', 'autoScale2d', 'resetScale2d',
-                  'hoverClosestCartesian', 'hoverCompareCartesian', 'toggleSpikelines',
-                  'sendDataToCloud', 'toggleHover', 'resetViews', 'resetViewMapbox', 'zoomInGeo', 'zoomOutGeo',
-                  'resetGeo', 'hoverClosestGeo', 'hoverClosestGl2d', 'hoverClosestPie', 'toggleHover', 'resetViewSankey',
-                  'resetViewTernary', 'hoverClosestTernary', 'hoverClosestMapbox', 'zoomInMapbox', 'zoomOutMapbox',
-                  'resetViewMapbox', 'hoverClosestScatter3d', 'hoverClosestMesh3d', 'resetCameraDefault3d',
-                  'resetCameraLastSave3d', 'hoverClosestGl2d', 'hoverClosestPie', 'toggleHover', 'resetViews'
-                ],
-                toImageButtonOptions: {
-                  format: 'png',
-                  filename: 'структура_выплат_с_измененными_параметрами',
-                  height: 600,
-                  width: 1200,
-                  scale: 2
-                }
-              }}
+              config={plotlyConfig}
             />
           </div>
         </div>
         {/* Таблица результатов */}
-        <ResultsTable data={tableData.length ? tableData : data} />
+        <ResultsTable data={tableData.length ? tableData : data} mainRate={mainRate} />
+        {/* --- Блок аннуитетных графиков --- */}
+        <div style={{ margin: '32px 0 0 0', padding: 0, background: 'none', borderRadius: 0, border: 'none' }}>
+          <h2 style={{ 
+            margin: '0 0 24px 0', 
+            color: '#1b263b', 
+            fontSize: 24, 
+            fontWeight: 'bold',
+            fontFamily: 'var(--main-font-family) !important',
+            textAlign: 'center',
+          }}>
+            Структура аннуитетного платежа
+          </h2>
+          {/* 1. Тогл */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <span
+              onClick={() => setAnnuityMode('months')}
+              style={{
+                fontWeight: annuityMode === 'months' ? 'bold' : 400,
+                color: annuityMode === 'months' ? '#1b263b' : '#888',
+                borderRadius: 6,
+                padding: '2px 8px',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+            >
+              По месяцам
+            </span>
+            <Switch
+              checked={annuityMode === 'years'}
+              onChange={checked => setAnnuityMode(checked ? 'years' : 'months')}
+              style={annuityMode === 'years' ? COMMON_STYLES.switch : COMMON_STYLES.switchInactive}
+            />
+            <span
+              onClick={() => setAnnuityMode('years')}
+              style={{
+                fontWeight: annuityMode === 'years' ? 'bold' : 400,
+                color: annuityMode === 'years' ? '#1b263b' : '#888',
+                borderRadius: 6,
+                padding: '2px 8px',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+            >
+              По годам
+            </span>
+          </div>
+          {/* 2. Блок сравнения */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+            <CompareParamsBlock
+              altRate={altRate}
+              altInitial={altInitial}
+              altMonthly={altMonthly}
+              setAltRate={setAltRate}
+              setAltInitial={setAltInitial}
+              setAltMonthly={setAltMonthly}
+              mainRate={mainRate}
+              mainInitial={mainInitial}
+              mainMonthly={mainMonthly}
+            />
+          </div>
+          {/* 3. Ползунок срока */}
+          <div style={{ maxWidth: 500, margin: '0 auto 16px auto' }}>
+            <div style={{ fontWeight: 500, fontSize: 14, color: '#1b263b', marginBottom: 4, marginLeft: 2 }}>
+              Срок (лет)
+            </div>
+            {(() => {
+              const total = maxYears - minYears + 1;
+              const maxLabels = 10;
+              const stepLabel = Math.ceil(total / maxLabels);
+              const marks = Object.fromEntries(
+                Array.from({length: total}, (_, i) => {
+                  const year = minYears + i;
+                  if ((year - minYears) % stepLabel === 0 || year === maxYears || year === minYears) {
+                    return [year, { label: String(year), style: { color: '#222', fontSize: 12, fontWeight: 500, marginTop: 8 } }];
+                  }
+                  return [year, ''];
+                })
+                .filter(([, label]) => label !== '')
+              );
+              return (
+                <Slider
+                  min={minYears}
+                  max={maxYears}
+                  value={annuityYears}
+                  onChange={value => {
+                    setAnnuityYears(value);
+                    if (document.activeElement instanceof HTMLElement) {
+                      document.activeElement.blur();
+                    }
+                  }}
+                  marks={marks}
+                  step={1}
+                  tooltip={{ open: false, trigger: 'hover', formatter: v => `${v} лет` }}
+                  trackStyle={COMMON_STYLES.slider.track}
+                  handleStyle={COMMON_STYLES.slider.handle}
+                  railStyle={COMMON_STYLES.slider.rail}
+                />
+              );
+            })()}
+          </div>
+          {/* 4. Заголовки графиков */}
+          <div style={{ display: 'flex', marginBottom: 0, marginTop: 24 }}>
+            <div style={{ flex: 1, textAlign: 'center' }}>
+              <h3 style={{ marginBottom: 0, color: '#1b263b', fontFamily: 'var(--main-font-family) !important' }}>
+                Текущая структура аннуитета
+              </h3>
+            </div>
+            <div style={{ flex: 1, textAlign: 'center' }}>
+              <h3 style={{ marginBottom: 0, color: '#1b263b', fontFamily: 'var(--main-font-family) !important' }}>
+                Структура аннуитета с измененными параметрами
+              </h3>
+            </div>
+          </div>
+          {/* Подписи (Платеж в год = ...) */}
+          <div style={{ display: 'flex', gap: 4, justifyContent: 'center', marginBottom: 8 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <YearlyPaymentLabel value={mainMonthly} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <YearlyPaymentLabel value={altMonthly} />
+            </div>
+          </div>
+          {/* 5. Легенда */}
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+            <AnnuityLegend />
+          </div>
+          {/* 6. Графики */}
+          <div style={{ display: 'flex', gap: 32 }}>
+            <div style={{ flex: 1 }}>
+              {annuityLoading ? <Spin size="large" /> : annuityPlotData && annuityPlotLayout && (
+                <Plot
+                  data={annuityPlotData.map(trace => {
+                    const total = trace.x.map((_: number, i: number) =>
+                      annuityPlotData.reduce((sum: number, t: any) => sum + (t.x[i] || 0), 0)
+                    );
+                    const percentArr = trace.x.map((val: number, i: number) => total[i] ? Math.round((val / total[i]) * 100) : 0);
+                    const absArr = trace.x.map((val: number) => formatRub(val));
+                    return {
+                      ...trace,
+                      text: percentArr.map((p: number, i: number) => `${p}% (${formatMillionsFixed(trace.x[i])})`),
+                      customdata: percentArr.map((p: number, i: number) => [p, Math.round(trace.x[i])]),
+                      textfont: { size: 14 },
+                      hovertemplate: '%{customdata[0]}%<br>%{customdata[1]:,} руб.'
+                    };
+                  })}
+                  layout={{
+                    ...annuityPlotLayout,
+                    height: (() => {
+                      const bars = annuityPlotData?.[0]?.y?.length ?? 0;
+                      return annuityMode === 'months'
+                        ? Math.max(200, 25 * bars)
+                        : Math.max(200, 25 * bars);
+                    })(),
+                    width: undefined,
+                    yaxis: { ...annuityPlotLayout.yaxis, autorange: 'reversed', showline: false }
+                  }}
+                  style={{ width: '100%', margin: '0 0.5%' }}
+                  config={plotlyConfig}
+                />
+              )}
+            </div>
+            <div style={{ flex: 1 }}>
+              {altAnnuityLoading ? <Spin size="large" /> : altAnnuityPlotData && altAnnuityPlotLayout && (
+                <Plot
+                  data={altAnnuityPlotData.map(trace => {
+                    const total = trace.x.map((_: number, i: number) =>
+                      altAnnuityPlotData.reduce((sum: number, t: any) => sum + (t.x[i] || 0), 0)
+                    );
+                    const percentArr = trace.x.map((val: number, i: number) => total[i] ? Math.round((val / total[i]) * 100) : 0);
+                    const absArr = trace.x.map((val: number) => formatRub(val));
+                    return {
+                      ...trace,
+                      text: percentArr.map((p: number, i: number) => `${p}% (${formatMillionsFixed(trace.x[i])})`),
+                      customdata: percentArr.map((p: number, i: number) => [p, Math.round(trace.x[i])]),
+                      textfont: { size: 14 },
+                      hovertemplate: '%{customdata[0]}%<br>%{customdata[1]:,} руб.'
+                    };
+                  })}
+                  layout={{
+                    ...altAnnuityPlotLayout,
+                    height: (() => {
+                      const bars = altAnnuityPlotData?.[0]?.y?.length ?? 0;
+                      return annuityMode === 'months'
+                        ? Math.max(200, 25 * bars)
+                        : Math.max(200, 25 * bars);
+                    })(),
+                    width: undefined,
+                    yaxis: { ...altAnnuityPlotLayout.yaxis, autorange: 'reversed', showline: false }
+                  }}
+                  style={{ width: '100%', margin: '0 0.5%' }}
+                  config={plotlyConfig}
+                />
+              )}
+            </div>
+          </div>
+        </div>
         <style>
           {`
             .ant-switch-checked {

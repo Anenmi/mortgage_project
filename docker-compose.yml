@@ -1,17 +1,43 @@
+version: '3.8'
+
 services:
   backend:
-    build: ./backend
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mortgage-backend
     ports:
       - "5000:5000"
     volumes:
-      - ./backend:/app
+      - ./backend:/app:Z
     working_dir: /app
+    command: python -u app.py
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    networks:
+      - mortgage-network
+
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+    container_name: mortgage-frontend
     ports:
       - "3000:3000"
     volumes:
-      - ./frontend:/app
-    working_dir: /app 
+      - ./frontend:/app:Z
+      - /app/node_modules
+    working_dir: /app
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - mortgage-network
+
+networks:
+  mortgage-network:
+    driver: bridge 
