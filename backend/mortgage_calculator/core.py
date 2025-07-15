@@ -1,57 +1,98 @@
 import plotly.graph_objs as go
 import pandas as pd
 from typing import List, Dict, Optional, Union
+import math
 
 class MortgageCalculator:
     """
-    A class to calculate mortgage scenarios for a given interest rate, monthly payment, and initial payment.
-    Provides methods to calculate overpayment, total cost, and display results as a Plotly table or graph.
+    Класс для расчета ипотеки в двух режимах:
+    1. По ежемесячному платежу (mode='monthly_payment')
+    2. По стоимости жилья (mode='property_value')
     """
-    def __init__(self, interest_rate: float, monthly_payment: float, initial_payment: float, min_initial_payment_percentage: float = 20):
-        """
-        Initialize the MortgageCalculator.
-        :param interest_rate: Annual interest rate as a percentage (e.g., 7 for 7%)
-        :param monthly_payment: Desired monthly payment amount
-        :param initial_payment: Initial payment amount
-        :param min_initial_payment_percentage: Minimum initial payment as a percentage of property value (default: 20)
-        """
-        self.interest_rate = interest_rate / 100  # Convert to decimal
-        self.monthly_payment = monthly_payment
-        self.initial_payment = initial_payment
-        self.min_initial_payment_percentage = min_initial_payment_percentage / 100  # Convert to decimal
+    def __init__(self, *, interest_rate: float, initial_payment: float, min_initial_payment_percentage: float = 20, mode: str = 'monthly_payment', monthly_payment: Optional[float] = None, property_value: Optional[float] = None):
+        self.interest_rate = float(interest_rate) / 100
+        self.initial_payment = float(initial_payment)
+        self.min_initial_payment_percentage = float(min_initial_payment_percentage) / 100
+        self.mode = mode
+        self.monthly_payment = float(monthly_payment) if monthly_payment is not None else None
+        self.property_value = float(property_value) if property_value is not None else None
         self.results: List[Dict] = []
+        self._validate()
+
+    def _validate(self):
+        if self.interest_rate < 0 or self.interest_rate > 1:
+            raise ValueError('Процентная ставка должна быть от 0 до 100')
+        if self.initial_payment < 0:
+            raise ValueError('Первоначальный взнос не может быть отрицательным')
+        if self.min_initial_payment_percentage < 0 or self.min_initial_payment_percentage > 1:
+            raise ValueError('Минимальный первоначальный взнос должен быть от 0 до 100%')
+        if self.mode == 'property_value':
+            if self.property_value is None:
+                raise ValueError('В режиме property_value необходимо указать property_value')
+            if self.property_value <= 0:
+                raise ValueError('Стоимость жилья должна быть больше 0')
+            if self.initial_payment > self.property_value:
+                raise ValueError('Первоначальный взнос не может превышать стоимость жилья')
+        elif self.mode == 'monthly_payment':
+            if self.monthly_payment is None:
+                raise ValueError('В режиме monthly_payment необходимо указать monthly_payment')
+            if self.monthly_payment <= 0:
+                raise ValueError('Ежемесячный платеж должен быть больше 0')
+        else:
+            raise ValueError('Неизвестный режим расчета')
 
     def calculate(self, min_years: int = 1, max_years: int = 30, step: Optional[int] = None) -> None:
-        """
-        Для каждого количества лет в диапазоне рассчитывает:
-        - Максимальную сумму кредита (principal)
-        - Стоимость недвижимости (principal + первоначальный взнос)
-        - Общую сумму выплат (первоначальный взнос + все ежемесячные платежи)
-        - Переплату (общая сумма выплат - стоимость недвижимости)
-        - Процент переплаты (переплата / principal)
-        Сохраняет результаты для каждого срока.
-        :param min_years: Минимальный срок ипотеки (лет)
-        :param max_years: Максимальный срок ипотеки (лет)
-        :param step: Шаг по годам (если None — авто-режим)
-        """
+        if self.mode == 'property_value':
+            self._calculate_by_property_value(min_years, max_years, step)
+        elif self.mode == 'monthly_payment':
+            self._calculate_by_monthly_payment(min_years, max_years, step)
+        else:
+            raise ValueError('Неизвестный режим расчета')
+
+    def _calculate_by_property_value(self, min_years: int, max_years: int, step: Optional[int]):
         self.results = []
         r = self.interest_rate / 12
-        years_range = range(min_years, max_years + 1)
+        years_range = range(min_years, max_years + 1, step or 1)
+        for years in years_range:
+            n = years * 12
+            principal = self.property_value - self.initial_payment
+            if r == 0:
+                monthly_payment = principal / n
+            else:
+                monthly_payment = principal * r * (1 + r) ** n / ((1 + r) ** n - 1)
+            total_payment = self.initial_payment + monthly_payment * n
+            overpayment = total_payment - self.property_value
+            overpayment_percentage = overpayment / principal if principal != 0 else 0
+            self.results.append({
+                'years': years,
+                'principal': round(principal),
+                'initial_payment': round(self.initial_payment),
+                'property_value': round(self.property_value),
+                'monthly_payment': round(monthly_payment),
+                'total_payment': round(total_payment),
+                'overpayment': round(overpayment),
+                'overpayment_percentage': overpayment_percentage,
+                'min_initial_payment_percentage': self.min_initial_payment_percentage * 100
+            })
+
+    def _calculate_by_monthly_payment(self, min_years: int, max_years: int, step: Optional[int]):
+        self.results = []
+        r = self.interest_rate / 12
+        years_range = range(min_years, max_years + 1, step or 1)
         for years in years_range:
             n = years * 12
             if r == 0:
                 principal = self.monthly_payment * n
             else:
                 principal = self.monthly_payment * (1 - (1 + r) ** -n) / r
-            actual_initial_payment = self.initial_payment
-            property_value = principal + actual_initial_payment
-            total_payment = actual_initial_payment + self.monthly_payment * n
+            property_value = principal + self.initial_payment
+            total_payment = self.initial_payment + self.monthly_payment * n
             overpayment = total_payment - property_value
             overpayment_percentage = overpayment / principal if principal != 0 else 0
             self.results.append({
                 'years': years,
                 'principal': round(principal),
-                'initial_payment': round(actual_initial_payment),
+                'initial_payment': round(self.initial_payment),
                 'property_value': round(property_value),
                 'monthly_payment': round(self.monthly_payment),
                 'total_payment': round(total_payment),
@@ -403,8 +444,18 @@ class MortgageCalculator:
         import numpy as np
         n = int(round(years * 12))
         r = self.interest_rate / 12
-        P = self.monthly_payment
-        principal_left = self.monthly_payment * (1 - (1 + r) ** -n) / r if r != 0 else self.monthly_payment * n
+        if self.mode == 'property_value':
+            principal = self.property_value - self.initial_payment
+            if r == 0:
+                monthly_payment = principal / n
+            else:
+                monthly_payment = principal * r * (1 + r) ** n / ((1 + r) ** n - 1)
+        elif self.mode == 'monthly_payment':
+            monthly_payment = self.monthly_payment
+        else:
+            raise ValueError('Неизвестный режим расчета')
+        P = monthly_payment
+        principal_left = P * (1 - (1 + r) ** -n) / r if r != 0 else P * n
         principal = principal_left
         months = np.arange(1, n + 1)
         interest_paid = []
@@ -537,13 +588,6 @@ class MortgageCalculator:
                     'showline': False,
                     'showgrid': False,
                     'zeroline': False,
-                    'tickmode': 'array',
-                    'tickvals': months.tolist(),
-                    'ticklabelposition': 'outside',
-                    'tickangle': 0,
-                    'ticklabelpadding': 40,
-                    'tickpad': 40,
-                    'ticktext': months_labels,
                 },
                 'showlegend': False,
                 'margin': {'l': 80, 'r': 40, 't': 0, 'b': 40},

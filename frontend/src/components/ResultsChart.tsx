@@ -4,6 +4,7 @@ import { Switch, InputNumber, Slider, Spin } from 'antd';
 import { MortgageResult } from '../api/mortgage';
 import { ResultsTable } from './ResultsTable';
 import axios from 'axios';
+import { debounce } from 'lodash';
 
 // Общие стили и константы
 const COMMON_STYLES = {
@@ -41,7 +42,7 @@ const COMMON_STYLES = {
     border: `1px solid ${borderColor}`
   }),
   switch: {
-    background: '#415a77',
+    background: '#1b263b',
     minWidth: '44px',
     height: '22px'
   },
@@ -52,9 +53,9 @@ const COMMON_STYLES = {
   },
   slider: {
     rail: { backgroundColor: '#e9ecef', height: 4 },
-    track: { backgroundColor: '#415a77', height: 4 },
+    track: { backgroundColor: 'transparent', height: 4 },
     handle: {
-      borderColor: '#415a77',
+      borderColor: '#1b263b',
       background: '#fff',
       borderWidth: 2,
       width: 10,
@@ -99,7 +100,7 @@ const formatYears = (years: number): string => {
 function YearlyPaymentLabel({ value }: { value: number }) {
   return (
     <div style={{ textAlign: 'center', marginBottom: 0, color: '#1b263b', fontWeight: 500, fontSize: 15, fontFamily: 'var(--main-font-family) !important' }}>
-      (Платеж в год = <b>{formatRub(value * 12)}</b> руб.)
+      Платеж в год = <b>{formatRub(value * 12)}</b> руб.
     </div>
   );
 }
@@ -130,6 +131,38 @@ const createAlternativeData = (
       total_payment: newTotalPayment,
       overpayment: newOverpayment,
       overpayment_percentage: newOverpaymentPercentage, // теперь пересчитывается
+      initial_payment: initial,
+      rate: rate / 100
+    };
+  });
+};
+
+// Функция для создания альтернативных данных с измененной стоимостью жилья (для режима PropertyValue)
+const createAlternativeDataForPropertyValue = (
+  originalData: MortgageResult[],
+  rate: number, // в процентах
+  initial: number,
+  propertyValue: number,
+  withInitial: boolean
+): MortgageResult[] => {
+  return originalData.map(item => {
+    const years = item.years;
+    const n = years * 12;
+    const r = rate / 100 / 12;
+    // Рассчитываем ежемесячный платёж по формуле аннуитета из стоимости жилья
+    const principal = propertyValue - initial;
+    const monthlyPayment = r === 0 ? principal / n : principal * (r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+    const newTotalPayment = (withInitial ? initial : 0) + monthlyPayment * n;
+    const newOverpayment = newTotalPayment - principal - (withInitial ? initial : 0);
+    const newOverpaymentPercentage = principal !== 0 ? newOverpayment / principal : 0;
+    return {
+      ...item,
+      monthly_payment: monthlyPayment,
+      principal: principal,
+      property_value: propertyValue,
+      total_payment: newTotalPayment,
+      overpayment: newOverpayment,
+      overpayment_percentage: newOverpaymentPercentage,
       initial_payment: initial,
       rate: rate / 100
     };
@@ -198,8 +231,12 @@ const CompareParamsBlock: React.FC<{
   mainRate: number;
   mainInitial: number;
   mainMonthly: number;
-}> = ({ altRate, altInitial, altMonthly, setAltRate, setAltInitial, setAltMonthly, mainRate, mainInitial, mainMonthly }) => (
-  <div style={{ background: '#f8f9fa', border: '1px solid #e9ecef', borderRadius: 8, padding: '20px 28px', display: 'inline-block', fontSize: 14, color: '#415a77', boxShadow: '0 1px 4px 0 rgba(30, 42, 73, 0.04)', width: 576, minWidth: 576, marginBottom: 24 }}>
+  isPropertyValueMode?: boolean;
+  altPropertyValue?: number;
+  setAltPropertyValue?: (v: number) => void;
+  mainPropertyValue?: number;
+}> = ({ altRate, altInitial, altMonthly, setAltRate, setAltInitial, setAltMonthly, mainRate, mainInitial, mainMonthly, isPropertyValueMode, altPropertyValue, setAltPropertyValue, mainPropertyValue }) => (
+  <div style={{ background: '#f8f9fa', border: '1px solid #e9ecef', borderRadius: 8, padding: '20px 28px', display: 'inline-block', fontSize: 14, color: '#1b263b', boxShadow: '0 1px 4px 0 rgba(30, 42, 73, 0.04)', width: 576, minWidth: 576, marginBottom: 24 }}>
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontWeight: 600, fontSize: 14, marginBottom: 18, color: '#1b263b' }}>
       <span>Изменить параметры для сравнения:</span>
       <button
@@ -209,6 +246,7 @@ const CompareParamsBlock: React.FC<{
           setAltRate(mainRate);
           setAltInitial(mainInitial);
           setAltMonthly(mainMonthly);
+          if (isPropertyValueMode && setAltPropertyValue && mainPropertyValue !== undefined) setAltPropertyValue(mainPropertyValue);
         }}
       >
         Сбросить
@@ -236,7 +274,18 @@ const CompareParamsBlock: React.FC<{
         isPercent: false,
         formatter: (v: any) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' '),
         parser: (v: any) => Number((v || '').toString().replace(/\s/g, '')),
-      }, {
+      },
+      isPropertyValueMode ? {
+        label: 'Стоимость жилья',
+        value: altPropertyValue ?? 0,
+        onChange: (v: number | null) => setAltPropertyValue ? setAltPropertyValue(v ?? (mainPropertyValue ?? 0)) : undefined,
+        min: 0,
+        step: 10000,
+        main: mainPropertyValue ?? 0,
+        isPercent: false,
+        formatter: (v: any) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' '),
+        parser: (v: any) => Number((v || '').toString().replace(/\s/g, '')),
+      } : {
         label: 'Ежемесячный платёж',
         value: altMonthly,
         onChange: (v: number | null) => setAltMonthly(v ?? mainMonthly),
@@ -246,8 +295,10 @@ const CompareParamsBlock: React.FC<{
         isPercent: false,
         formatter: (v: any) => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ' '),
         parser: (v: any) => Number((v || '').toString().replace(/\s/g, '')),
-      }].map((field, idx) => {
-        const diff = field.value - field.main;
+      }
+      ].map((field, idx) => {
+        if (!field) return null;
+        const diff = (field.value !== undefined && field.main !== undefined) ? field.value - field.main : 0;
         let diffText = null;
         if (diff !== 0) {
           const isIncrease = diff > 0;
@@ -288,21 +339,42 @@ const CompareParamsBlock: React.FC<{
   </div>
 );
 
-export const ResultsChart: React.FC<{ data: MortgageResult[], mainRate: number }> = ({ data, mainRate }) => {
+export const ResultsChart: React.FC<{ data: MortgageResult[], mainRate: number, hideYearlyPaymentInfo?: boolean, isPropertyValueMode?: boolean, altPropertyValue?: number, setAltPropertyValue?: (v: number) => void, mainPropertyValue?: number }> = ({ data, mainRate, hideYearlyPaymentInfo, isPropertyValueMode, altPropertyValue, setAltPropertyValue, mainPropertyValue }) => {
   const [withInitial, setWithInitial] = useState(true);
   // Альтернативные параметры (по умолчанию — из первого элемента data)
   const mainInitial = data[0]?.initial_payment ?? 0;
   const mainMonthly = data[0]?.monthly_payment ?? 0;
-  const [altRate, setAltRate] = useState(mainRate);
-  const [altInitial, setAltInitial] = useState(mainInitial);
-  const [altMonthly, setAltMonthly] = useState(mainMonthly);
+  const mainPropValue = data[0]?.property_value ?? 0;
+  // --- useState с localStorage для альтернативных параметров ---
+  const [altRate, setAltRate] = useState(() => {
+    const saved = localStorage.getItem('altRate');
+    return saved !== null ? Number(saved) : mainRate;
+  });
+  const [altInitial, setAltInitial] = useState(() => {
+    const saved = localStorage.getItem('altInitial');
+    return saved !== null ? Number(saved) : mainInitial;
+  });
+  const [altMonthly, setAltMonthly] = useState(() => {
+    const saved = localStorage.getItem('altMonthly');
+    return saved !== null ? Number(saved) : mainMonthly;
+  });
+  const [altPropValue, setAltPropValue] = useState(() => {
+    const saved = localStorage.getItem('altPropValue');
+    return saved !== null ? Number(saved) : mainPropValue;
+  });
+  // --- Сохранять в localStorage при изменении ---
+  useEffect(() => { localStorage.setItem('altRate', String(altRate)); }, [altRate]);
+  useEffect(() => { localStorage.setItem('altInitial', String(altInitial)); }, [altInitial]);
+  useEffect(() => { localStorage.setItem('altMonthly', String(altMonthly)); }, [altMonthly]);
+  useEffect(() => { localStorage.setItem('altPropValue', String(altPropValue)); }, [altPropValue]);
 
   // Сброс альтернативных параметров при изменении основных
   useEffect(() => {
     setAltRate(mainRate);
     setAltInitial(mainInitial);
     setAltMonthly(mainMonthly);
-  }, [mainRate, mainInitial, mainMonthly]);
+    setAltPropValue(mainPropValue);
+  }, [mainRate, mainInitial, mainMonthly, mainPropValue]);
 
   // Новое состояние для таблицы
   const [tableData, setTableData] = useState<MortgageResult[]>([]);
@@ -328,6 +400,16 @@ export const ResultsChart: React.FC<{ data: MortgageResult[], mainRate: number }
   const minYears = Math.min(...data.map(d => d.years));
   const maxYears = Math.max(...data.map(d => d.years));
   const [annuityYears, setAnnuityYears] = useState(minYears);
+  // Для плавного UX: отдельное состояние для handle
+  const [sliderValue, setSliderValue] = useState(minYears);
+  // Дебаунс для плавного обновления срока
+  const debouncedSetAnnuityYears = React.useMemo(
+    () => debounce((value: number) => setAnnuityYears(value), 500),
+    []
+  );
+  useEffect(() => {
+    setSliderValue(annuityYears);
+  }, [annuityYears]);
   const [annuityLoading, setAnnuityLoading] = useState(false);
   const [annuityPlotData, setAnnuityPlotData] = useState<any[] | null>(null);
   const [annuityPlotLayout, setAnnuityPlotLayout] = useState<any | null>(null);
@@ -338,17 +420,27 @@ export const ResultsChart: React.FC<{ data: MortgageResult[], mainRate: number }
   }, [minYears, data]);
 
   // Параметры для запроса
-  const mainParams = {
-    interest_rate: mainRate,
-    monthly_payment: mainMonthly,
-    initial_payment: mainInitial,
-    min_initial_payment_percentage: data[0]?.min_initial_payment_percentage ?? 20,
-  };
+  const mainParams: any = {};
+  mainParams.interest_rate = mainRate;
+  mainParams.initial_payment = mainInitial;
+  mainParams.min_initial_payment_percentage = data[0]?.min_initial_payment_percentage ?? 20;
+  if (annuityMode === 'months') {
+    mainParams.months = annuityYears * 12;
+  } else {
+    mainParams.years = annuityYears;
+  }
+  if (isPropertyValueMode) {
+    mainParams.property_value = mainPropertyValue;
+  } else {
+    mainParams.monthly_payment = mainMonthly;
+  }
+  const mainMode = isPropertyValueMode ? 'property_value' : 'monthly_payment';
 
   useEffect(() => {
     if (!data.length) return;
     setAnnuityLoading(true);
-    axios.post('http://localhost:5000/api/annuity_payments', { ...mainParams, years: annuityYears, mode: annuityMode })
+    console.log('mainParams for annuity:', { ...mainParams, mode: mainMode, mode2: annuityMode });
+    axios.post('http://localhost:5000/api/annuity_payments', { ...mainParams, mode: mainMode, mode2: annuityMode })
       .then((res) => {
         setAnnuityPlotData(res.data.data);
         setAnnuityPlotLayout(res.data.layout);
@@ -363,13 +455,26 @@ export const ResultsChart: React.FC<{ data: MortgageResult[], mainRate: number }
   useEffect(() => {
     if (!data.length) return;
     setAltAnnuityLoading(true);
+    const altParams: any = {};
+    altParams.interest_rate = altRate;
+    altParams.initial_payment = altInitial;
+    altParams.min_initial_payment_percentage = data[0]?.min_initial_payment_percentage ?? 20;
+    if (annuityMode === 'months') {
+      altParams.months = annuityYears * 12;
+    } else {
+      altParams.years = annuityYears;
+    }
+    if (isPropertyValueMode) {
+      altParams.property_value = altPropValue;
+    } else {
+      altParams.monthly_payment = altMonthly;
+    }
+    const debugAltParams = { ...altParams, mode: isPropertyValueMode ? 'property_value' : 'monthly_payment', mode2: annuityMode };
+    console.log('altParams for annuity:', debugAltParams);
     axios.post('http://localhost:5000/api/annuity_payments', {
-      interest_rate: altRate,
-      monthly_payment: altMonthly,
-      initial_payment: altInitial,
-      min_initial_payment_percentage: data[0]?.min_initial_payment_percentage ?? 20,
-      years: annuityYears,
-      mode: annuityMode
+      ...altParams,
+      mode: isPropertyValueMode ? 'property_value' : 'monthly_payment',
+      mode2: annuityMode
     })
       .then((res) => {
         setAltAnnuityPlotData(res.data.data);
@@ -381,7 +486,9 @@ export const ResultsChart: React.FC<{ data: MortgageResult[], mainRate: number }
   if (!data.length) return null;
   
   // Создаем альтернативные данные
-  const alternativeData = createAlternativeData(data, altRate, altInitial, altMonthly, withInitial);
+  const alternativeData = isPropertyValueMode 
+    ? createAlternativeDataForPropertyValue(data, altRate, altInitial, altPropValue, withInitial)
+    : createAlternativeData(data, altRate, altInitial, altMonthly, withInitial);
   
   // Функция для создания данных графика
   const createChartData = (dataSource: MortgageResult[], withInitialToggle: boolean) => {
@@ -469,7 +576,7 @@ export const ResultsChart: React.FC<{ data: MortgageResult[], mainRate: number }
   };
 
   // Функция для создания аннотаций с фиксированным отступом
-  const createAnnotationsWithFixedOffset = (dataSource: MortgageResult[], withInitialToggle: boolean) => {
+  const createAnnotationsWithFixedOffset = (dataSource: MortgageResult[], withInitialToggle: boolean, isPropertyValueMode: boolean) => {
     const years = dataSource.map(d => d.years);
     const yPositions = years.map((_, index) => index); // Позиции для равномерного расположения
     const principal = dataSource.map(d => d.principal);
@@ -484,10 +591,14 @@ export const ResultsChart: React.FC<{ data: MortgageResult[], mainRate: number }
     // Аннотации справа от бара с фиксированным отступом
     const rightAnnotations = (!withInitialToggle
       ? yPositions.map((y, i) => {
+          const baseText = formatMillions(principal[i] + overpay[i]);
+          const monthlyText = isPropertyValueMode 
+            ? ` | Ежемесячный платеж: <span style="color:rgb(17, 27, 53); font-weight: bold; background-color: #fbf398; padding: 1px 3px; border-radius: 2px;">${Math.round(dataSource[i].monthly_payment).toLocaleString('ru-RU')}</span> руб.`
+            : '';
           return {
             x: principal[i] + overpay[i],
             y,
-            text: formatMillions(principal[i] + overpay[i]),
+            text: baseText + monthlyText,
             showarrow: false,
             font: { size: 12, color: '#555' },
             xanchor: 'left',
@@ -501,10 +612,14 @@ export const ResultsChart: React.FC<{ data: MortgageResult[], mainRate: number }
           const actualPct = total > 0 ? (initial[i] / total) * 100 : 0;
           const minPct = (dataSource[i] as any).min_initial_payment_percentage ?? 0;
           const isTooLow = actualPct <= minPct;
+          const baseText = formatMillions(initial[i] + principal[i] + overpay[i]);
+          const monthlyText = isPropertyValueMode 
+            ? ` | Ежемесячный платеж: <span style="color:rgb(31, 66, 104); font-weight: bold; background-color: #fbf398; padding: 1px 3px; border-radius: 2px;">${Math.round(dataSource[i].monthly_payment).toLocaleString('ru-RU')}</span> руб.`
+            : '';
           return {
             x: initial[i] + principal[i] + overpay[i],
             y,
-            text: formatMillions(initial[i] + principal[i] + overpay[i]),
+            text: baseText + monthlyText,
             showarrow: false,
             font: { size: 12, color: isTooLow ? '#bbb' : '#555' },
             xanchor: 'left',
@@ -834,8 +949,8 @@ export const ResultsChart: React.FC<{ data: MortgageResult[], mainRate: number }
     : alternativeData.map(d => d.principal + d.overpayment);
   
   // Создаем аннотации для обоих графиков с фиксированным отступом
-  const annotations1 = createAnnotationsWithFixedOffset(data, withInitial);
-  const annotations2 = createAnnotationsWithFixedOffset(alternativeData, withInitial);
+  const annotations1 = createAnnotationsWithFixedOffset(data, withInitial, !!isPropertyValueMode);
+  const annotations2 = createAnnotationsWithFixedOffset(alternativeData, withInitial, !!isPropertyValueMode);
   
   // Функция для генерации тиков и подписей оси X
   const getXAxisTicksAndLabels = (maxValue: number) => {
@@ -908,6 +1023,17 @@ export const ResultsChart: React.FC<{ data: MortgageResult[], mainRate: number }
     return `${(val / 1_000_000).toFixed(1).replace('.', ',')} млн`;
   }
 
+  console.log('[ResultsChart] data prop:', data);
+  // Найти выбранную строку по сроку для основной и альтернативной данных
+  const selectedData = data.find(d => d.years === annuityYears);
+  const selectedAltData = alternativeData.find(d => d.years === annuityYears);
+
+  // Форматирование для месяцев: '13 месяц (2 год)'
+  function formatMonthYearLabel(month: number): string {
+    const year = Math.floor((month - 1) / 12) + 1;
+    return `${month} месяц (${year} год)`;
+  }
+
   return (
     <div style={{ width: '100%', maxWidth: 2000, margin: '0 auto' }}>
       <div style={{
@@ -932,7 +1058,6 @@ export const ResultsChart: React.FC<{ data: MortgageResult[], mainRate: number }
         }}>
           Структура выплат в зависимости от срока кредита
         </h2>
-        {/* Информационный блок */}
         {/* Тогл Учитывать первоначальный взнос */}
         <div style={{ display: 'flex', justifyContent: 'flex-start', alignItems: 'center', marginBottom: 16 }}>
           <span style={{ fontWeight: 'bold', fontSize: 15, color: '#1b263b', marginRight: 12, fontFamily: 'var(--main-font-family) !important' }} className="mortgage-form-label">
@@ -956,6 +1081,10 @@ export const ResultsChart: React.FC<{ data: MortgageResult[], mainRate: number }
             mainRate={mainRate}
             mainInitial={mainInitial}
             mainMonthly={mainMonthly}
+            isPropertyValueMode={isPropertyValueMode}
+            altPropertyValue={altPropValue}
+            setAltPropertyValue={setAltPropValue}
+            mainPropertyValue={mainPropValue}
           />
         </div>
         {/* Блок с заголовками к каждому графику */}
@@ -974,10 +1103,10 @@ export const ResultsChart: React.FC<{ data: MortgageResult[], mainRate: number }
         {/* Блок с описанием параметров к каждому графику */}
         <div style={{ display: 'flex', gap: 4, justifyContent: 'center', marginBottom: 8 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <YearlyPaymentLabel value={mainMonthly} />
+            {!isPropertyValueMode && <YearlyPaymentLabel value={mainMonthly} />}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <YearlyPaymentLabel value={altMonthly} />
+            {!isPropertyValueMode && <YearlyPaymentLabel value={altMonthly} />}
           </div>
         </div>
         {/* Легенда */}
@@ -1015,8 +1144,10 @@ export const ResultsChart: React.FC<{ data: MortgageResult[], mainRate: number }
                   tickfont: { size: 12, color: '#555' },
                   autorange: 'reversed',
                   tickmode: 'array',
-                  tickvals: data.map((_, index) => index),
-                  ticktext: data.map(d => `${formatYears(d.years)}`)
+                  tickvals: annuityMode === 'months' ? data.map((_, i) => i) : data.map((_, i) => i),
+                  ticktext: annuityMode === 'months'
+                    ? data.map((d, i) => formatMonthYearLabel(i + 1))
+                    : data.map(d => `${formatYears(d.years)}`)
                 },
                 height: Math.max(400, 140 * data.length),
                 margin: COMMON_STYLES.plot.margin,
@@ -1060,8 +1191,10 @@ export const ResultsChart: React.FC<{ data: MortgageResult[], mainRate: number }
                   tickfont: { size: 12, color: '#555' },
                   autorange: 'reversed',
                   tickmode: 'array',
-                  tickvals: alternativeData.map((_, index) => index),
-                  ticktext: alternativeData.map(d => `${formatYears(d.years)}`)
+                  tickvals: annuityMode === 'months' ? alternativeData.map((_, i) => i) : alternativeData.map((_, i) => i),
+                  ticktext: annuityMode === 'months'
+                    ? alternativeData.map((d, i) => formatMonthYearLabel(i + 1))
+                    : alternativeData.map(d => `${formatYears(d.years)}`)
                 },
                 height: Math.max(400, 140 * alternativeData.length),
                 margin: COMMON_STYLES.plot.margin,
@@ -1135,34 +1268,63 @@ export const ResultsChart: React.FC<{ data: MortgageResult[], mainRate: number }
               mainRate={mainRate}
               mainInitial={mainInitial}
               mainMonthly={mainMonthly}
+              isPropertyValueMode={isPropertyValueMode}
+              altPropertyValue={altPropValue}
+              setAltPropertyValue={setAltPropValue}
+              mainPropertyValue={mainPropValue}
             />
           </div>
           {/* 3. Ползунок срока */}
           <div style={{ maxWidth: 500, margin: '0 auto 16px auto' }}>
             <div style={{ fontWeight: 500, fontSize: 14, color: '#1b263b', marginBottom: 4, marginLeft: 2 }}>
-              Срок (лет)
+              <div style={{ textAlign: 'center', fontSize: 16, fontWeight: 600, color: '#1b263b', marginBottom: 8 }}>
+                Срок (лет)
+              </div>
             </div>
             {(() => {
               const total = maxYears - minYears + 1;
               const maxLabels = 10;
               const stepLabel = Math.ceil(total / maxLabels);
-              const marks = Object.fromEntries(
-                Array.from({length: total}, (_, i) => {
-                  const year = minYears + i;
-                  if ((year - minYears) % stepLabel === 0 || year === maxYears || year === minYears) {
-                    return [year, { label: String(year), style: { color: '#222', fontSize: 12, fontWeight: 500, marginTop: 8 } }];
-                  }
-                  return [year, ''];
-                })
-                .filter(([, label]) => label !== '')
-              );
+             const marks = Object.fromEntries(
+               Array.from({length: total}, (_, i) => {
+                 const year = minYears + i;
+                 if ((year - minYears) % stepLabel === 0 || year === maxYears || year === minYears) {
+                   // Для выбранного значения — синий цвет и жирный, для остальных — серый
+                   const isSelected = year === annuityYears;
+                   return [year, {
+                     label: <span style={{
+                       color: isSelected ? '#1b263b' : '#bfc4c9',
+                       fontSize: isSelected ? 14 : 12,
+                       fontWeight: isSelected ? 700 : 500,
+                       marginTop: 8,
+                       transition: 'all 0.2s'
+                     }}>{year}</span>
+                   }];
+                 }
+                 return [year, ''];
+               })
+               .filter(([, label]) => label !== '')
+             );
+              // Добавить выбранный год, если его нет среди marks
+              if (!marks[annuityYears]) {
+                marks[annuityYears] = {
+                  label: <span style={{
+                    color: '#1b263b',
+                    fontSize: 14,
+                    fontWeight: 700,
+                    marginTop: 8,
+                    transition: 'all 0.2s'
+                  }}>{annuityYears}</span>
+                };
+              }
               return (
                 <Slider
                   min={minYears}
                   max={maxYears}
-                  value={annuityYears}
-                  onChange={value => {
-                    setAnnuityYears(value);
+                  value={sliderValue}
+                  onChange={(value: number) => {
+                    setSliderValue(value);
+                    debouncedSetAnnuityYears(value);
                     if (document.activeElement instanceof HTMLElement) {
                       document.activeElement.blur();
                     }
@@ -1192,11 +1354,25 @@ export const ResultsChart: React.FC<{ data: MortgageResult[], mainRate: number }
           </div>
           {/* Подписи (Платеж в год = ...) */}
           <div style={{ display: 'flex', gap: 4, justifyContent: 'center', marginBottom: 8 }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <YearlyPaymentLabel value={mainMonthly} />
+            <div style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
+              {isPropertyValueMode ? (
+                <div style={{ color: '#1b263b', fontWeight: 500, fontSize: 15, fontFamily: 'var(--main-font-family) !important' }}>
+                  Ежемесячный платеж = <b>{selectedData ? Math.round(selectedData.monthly_payment).toLocaleString('ru-RU') : '-'}</b> руб.<br/>
+                  Платеж в год = <b>{selectedData ? Math.round(selectedData.monthly_payment * 12).toLocaleString('ru-RU') : '-'}</b> руб.
+                </div>
+              ) : (
+                <YearlyPaymentLabel value={mainMonthly} />
+              )}
             </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <YearlyPaymentLabel value={altMonthly} />
+            <div style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
+              {isPropertyValueMode ? (
+                <div style={{ color: '#1b263b', fontWeight: 500, fontSize: 15, fontFamily: 'var(--main-font-family) !important' }}>
+                  Ежемесячный платеж = <b>{selectedAltData ? Math.round(selectedAltData.monthly_payment).toLocaleString('ru-RU') : '-'}</b> руб.<br/>
+                  Платеж в год = <b>{selectedAltData ? Math.round(selectedAltData.monthly_payment * 12).toLocaleString('ru-RU') : '-'}</b> руб.
+                </div>
+              ) : (
+                <YearlyPaymentLabel value={altMonthly} />
+              )}
             </div>
           </div>
           {/* 5. Легенда */}
@@ -1276,11 +1452,11 @@ export const ResultsChart: React.FC<{ data: MortgageResult[], mainRate: number }
         <style>
           {`
             .ant-switch-checked {
-              background: #415a77 !important;
-              border-color: #415a77 !important;
+              background: #1b263b !important;
+              border-color: #1b263b !important;
             }
             .ant-switch {
-              border-color: #415a77 !important;
+              border-color: #1b263b !important;
             }
             .ant-switch-handle {
               background: none !important;
@@ -1289,6 +1465,9 @@ export const ResultsChart: React.FC<{ data: MortgageResult[], mainRate: number }
             }
             .chart-toggle-row, .chart-toggle-row * {
               font-family: var(--main-font-family) !important;
+            }
+            .ant-slider-dot {
+              display: none !important;
             }
           `}
         </style>

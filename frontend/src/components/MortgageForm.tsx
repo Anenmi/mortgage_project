@@ -88,7 +88,7 @@ export const MortgageForm: React.FC<Props> = ({ onCalculate }) => {
         .ant-form-item-label > label { display: none !important; }
         .mortgage-form-label { color: #1b263b !important; }
         .ant-input-number { outline: none !important; box-shadow: none !important; border: none !important; background: #e9ecef !important; transition: background 0.2s, border 0.2s; }
-        .ant-input-number:focus, .ant-input-number-focused, .ant-input-number[aria-valuenow]:not([aria-valuenow='']) { background: #fff !important; border: 1px solid #bfc4c9 !important; }
+        .ant-input-number:focus, .ant-input-number-focused, .ant-input-number[aria-valuenow]:not([aria-valuenow='']) { background: #fff !important; border: 1px solid #bfc9c9 !important; }
         .ant-input-number input[type=number]::-webkit-inner-spin-button, .ant-input-number input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         .ant-input-number input[type=number] { -moz-appearance: textfield; }
         .ant-input-number-handler-wrap { display: none !important; }
@@ -97,11 +97,11 @@ export const MortgageForm: React.FC<Props> = ({ onCalculate }) => {
         form={form}
         layout="inline"
         initialValues={{
-          interest_rate: 16.5,
+          interest_rate: 6.0,
           monthly_payment: 300000,
-          initial_payment: 5000000,
+          initial_payment: 3000000,
           min_initial_payment_percentage: 20,
-          years: [5, 20]
+          years: [1, 10]
         }}
         onValuesChange={(_, values) => triggerCalculate(values)}
         style={{ marginBottom: 32, flexWrap: 'wrap', gap: 16, justifyContent: 'center', display: 'flex', alignItems: 'center' }}
@@ -120,10 +120,10 @@ export const MortgageForm: React.FC<Props> = ({ onCalculate }) => {
               max={30} 
               defaultValue={[5, 10]} 
               style={{ width: 320 }}
-              trackStyle={[{ backgroundColor: '#415a77' }, { backgroundColor: '#415a77' }]}
+              trackStyle={[{ backgroundColor: '#1b263b' }, { backgroundColor: '#1b263b' }]}
               handleStyle={[
-                { borderColor: '#415a77', backgroundColor: '#415a77' }, 
-                { borderColor: '#415a77', backgroundColor: '#415a77' }
+                { borderColor: '#1b263b', backgroundColor: '#1b263b' }, 
+                { borderColor: '#1b263b', backgroundColor: '#1b263b' }
               ]}
               railStyle={{ backgroundColor: '#e0e0e0' }}
               marks={form.getFieldValue('years') ? {

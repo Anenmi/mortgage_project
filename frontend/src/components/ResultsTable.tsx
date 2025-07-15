@@ -25,6 +25,8 @@ export const ResultsTable: React.FC<{ data: MortgageResult[], mainRate: number }
     
     const widths: { [key: string]: number } = {
       years: 0,
+      rate: 0,
+      monthly_payment: 0,
       total_payment: 0,
       initial_payment: 0,
       principal: 0,
@@ -35,6 +37,8 @@ export const ResultsTable: React.FC<{ data: MortgageResult[], mainRate: number }
     // Заголовки столбцов
     const headers = [
       'Срок кредита (лет)',
+      'Ставка',
+      'Ежемесячный платеж',
       'Общая выплата',
       'Первоначальный взнос',
       'Сумма кредита',
@@ -54,6 +58,14 @@ export const ResultsTable: React.FC<{ data: MortgageResult[], mainRate: number }
       // Срок кредита
       const yearsText = `${record.years} лет`;
       widths.years = Math.max(widths.years, getTextWidth(yearsText));
+
+      // Ставка
+      const rateText = `${mainRate.toFixed(2).replace('.', ',')}%`;
+      widths.rate = Math.max(widths.rate, getTextWidth(rateText));
+
+      // Ежемесячный платеж
+      const monthlyText = `${formatNumber(record.monthly_payment)} руб.`;
+      widths.monthly_payment = Math.max(widths.monthly_payment, getTextWidth(monthlyText));
 
       // Общая выплата
       const totalText = `${formatNumber(record.total_payment)} руб.`;
@@ -90,7 +102,7 @@ export const ResultsTable: React.FC<{ data: MortgageResult[], mainRate: number }
 
     // Адаптивная логика: на больших экранах уменьшаем ширину
     const screenWidth = window.innerWidth;
-    const numColumns = 6; // количество столбцов
+    const numColumns = 8; // количество столбцов (обновлено)
     const totalTableWidth = maxWidth * numColumns;
     
     // Если таблица слишком широкая для экрана, уменьшаем ширину столбцов
@@ -106,7 +118,7 @@ export const ResultsTable: React.FC<{ data: MortgageResult[], mainRate: number }
     }
 
     return maxWidth;
-  }, [data]);
+  }, [data, mainRate]);
 
   if (!data.length) return null;
 
@@ -118,12 +130,20 @@ export const ResultsTable: React.FC<{ data: MortgageResult[], mainRate: number }
       width: columnWidths,
       render: (v: number) => `${v} лет`
     },
-    // Новая колонка Ставка
+    // Колонка Ставка
     {
       title: 'Ставка',
       key: 'rate',
       width: columnWidths,
       render: () => `${mainRate.toFixed(2).replace('.', ',')}%`
+    },
+    // Новая колонка Ежемесячный платеж
+    {
+      title: 'Ежемесячный платеж',
+      dataIndex: 'monthly_payment',
+      key: 'monthly_payment',
+      width: columnWidths,
+      render: (v: number) => formatNumber(v) + ' руб.'
     },
     { 
       title: 'Общая выплата', 
@@ -184,9 +204,11 @@ export const ResultsTable: React.FC<{ data: MortgageResult[], mainRate: number }
 
   const handleDownloadExcel = () => {
     // Создаем CSV данные
-    const headers = ['Срок кредита (лет)', 'Общая выплата (руб.)', 'Первоначальный взнос (руб.)', 'Сумма кредита (руб.)', 'Стоимость жилья (руб.)', 'Переплата за кредит (руб.)', 'Процент переплаты (%)'];
+    const headers = ['Срок кредита (лет)', 'Ставка (%)', 'Ежемесячный платеж (руб.)', 'Общая выплата (руб.)', 'Первоначальный взнос (руб.)', 'Сумма кредита (руб.)', 'Стоимость жилья (руб.)', 'Переплата за кредит (руб.)', 'Процент переплаты (%)'];
     const csvData = data.map(record => [
       record.years,
+      mainRate,
+      record.monthly_payment,
       record.total_payment,
       record.initial_payment,
       record.principal,
@@ -218,8 +240,8 @@ export const ResultsTable: React.FC<{ data: MortgageResult[], mainRate: number }
           icon={<DownloadOutlined style={{ fontSize: 16 }} />} 
           onClick={handleDownloadExcel}
           style={{ 
-            background: '#415a77', 
-            borderColor: '#415a77',
+            background: '#1b263b', 
+            borderColor: '#1b263b',
             borderRadius: 6,
             fontWeight: 500,
             width: 28,
@@ -235,10 +257,28 @@ export const ResultsTable: React.FC<{ data: MortgageResult[], mainRate: number }
       </div>
       <style>
         {`
+          .custom-table .ant-table,
+          .custom-table .ant-table-container,
+          .custom-table .ant-table-content,
+          .custom-table .ant-table-thead,
+          .custom-table .ant-table-thead > tr,
+          .custom-table .ant-table-thead > tr > th,
+          .custom-table .ant-table-thead > tr > th::before,
+          .custom-table .ant-table-thead > tr > th::after {
+            border: none !important;
+            outline: none !important;
+            box-shadow: none !important;
+            background-clip: padding-box !important;
+            border-image: none !important;
+            border-style: none !important;
+            border-width: 0 !important;
+            border-color: transparent !important;
+          }
           .custom-table .ant-table-thead > tr > th {
-            background: #415a77 !important;
+            background: #1b263b !important;
             color: #fff !important;
             font-weight: bold;
+            text-align: center !important;
           }
         `}
       </style>

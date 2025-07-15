@@ -4,7 +4,7 @@ import MonthlyPaymentMode from './components/MonthlyPaymentMode';
 import PropertyValueMode from './components/PropertyValueMode';
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'monthly' | 'property'>('monthly');
+  const [activeTab, setActiveTab] = useState<'monthly' | 'property'>('property');
 
   return (
     <div>
@@ -18,42 +18,46 @@ function App() {
         boxShadow: '0 2px 8px 0 rgba(30, 42, 73, 0.08)',
         marginBottom: 0
       }}>
-        <div style={{ display: 'flex', height: '100%' }}>
-          <button
-            onClick={() => setActiveTab('monthly')}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: activeTab === 'monthly' ? '#fff' : '#bfc9da',
-              fontWeight: activeTab === 'monthly' ? 700 : 400,
-              fontSize: 18,
-              padding: '0 32px',
-              height: '100%',
-              cursor: 'pointer',
-              borderBottom: activeTab === 'monthly' ? '3px solid #fff' : '3px solid transparent',
-              transition: 'all 0.2s',
-              outline: 'none',
-            }}
-          >
-            Если знаю ежемесячный платеж
-          </button>
+        <div style={{ display: 'flex', height: '100%', width: '100%' }}>
           <button
             onClick={() => setActiveTab('property')}
             style={{
-              background: 'none',
+              flex: 1,
+              background: activeTab === 'property' ? '#1b263b' : '#e9ecef',
               border: 'none',
-              color: activeTab === 'property' ? '#fff' : '#bfc9da',
+              color: activeTab === 'property' ? '#fff' : '#1b263b',
               fontWeight: activeTab === 'property' ? 700 : 400,
-              fontSize: 18,
-              padding: '0 32px',
+              fontSize: 16,
+              padding: '0 0',
               height: '100%',
               cursor: 'pointer',
-              borderBottom: activeTab === 'property' ? '3px solid #fff' : '3px solid transparent',
+              borderBottom: activeTab === 'property' ? '2px solid #a8dadc' : '3px solid transparent',
               transition: 'all 0.2s',
               outline: 'none',
+              borderRadius: '0',
             }}
           >
             Если знаю стоимость жилья
+          </button>
+          <button
+            onClick={() => setActiveTab('monthly')}
+            style={{
+              flex: 1,
+              background: activeTab === 'monthly' ? '#1b263b' : '#e9ecef',
+              border: 'none',
+              color: activeTab === 'monthly' ? '#fff' : '#1b263b',
+              fontWeight: activeTab === 'monthly' ? 700 : 400,
+              fontSize: 16,
+              padding: '0 0',
+              height: '100%',
+              cursor: 'pointer',
+              borderBottom: activeTab === 'monthly' ? '2px solid #a8dadc' : '3px solid transparent',
+              transition: 'all 0.2s',
+              outline: 'none',
+              borderRadius: '0',
+            }}
+          >
+            Если знаю ежемесячный платеж
           </button>
         </div>
       </nav>
