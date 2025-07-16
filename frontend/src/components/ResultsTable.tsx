@@ -122,14 +122,14 @@ export const ResultsTable: React.FC<{ data: MortgageResult[], mainRate: number }
 
   if (!data.length) return null;
 
-  const columns = [
-    { 
-      title: 'Срок кредита (лет)', 
-      dataIndex: 'years', 
-      key: 'years',
+const columns = [
+  { 
+    title: 'Срок кредита (лет)', 
+    dataIndex: 'years', 
+    key: 'years',
       width: columnWidths,
-      render: (v: number) => `${v} лет`
-    },
+    render: (v: number) => `${v} лет`
+  },
     // Колонка Ставка
     {
       title: 'Ставка',
@@ -145,62 +145,62 @@ export const ResultsTable: React.FC<{ data: MortgageResult[], mainRate: number }
       width: columnWidths,
       render: (v: number) => formatNumber(v) + ' руб.'
     },
-    { 
-      title: 'Общая выплата', 
-      dataIndex: 'total_payment', 
-      key: 'total_payment', 
+  { 
+    title: 'Общая выплата', 
+    dataIndex: 'total_payment', 
+    key: 'total_payment', 
       width: columnWidths,
       render: (v: number) => formatNumber(v) + ' руб.'
-    },
-    { 
-      title: 'Первоначальный взнос', 
-      dataIndex: 'initial_payment', 
-      key: 'initial_payment', 
+  },
+  { 
+    title: 'Первоначальный взнос', 
+    dataIndex: 'initial_payment', 
+    key: 'initial_payment', 
       width: columnWidths,
-      render: (v: number, record: any) => {
-        const propertyValue = record.initial_payment + record.principal;
-        const percentage = Math.round((record.initial_payment / propertyValue) * 100);
-        return (
-          <span>
+    render: (v: number, record: any) => {
+      const propertyValue = record.initial_payment + record.principal;
+      const percentage = Math.round((record.initial_payment / propertyValue) * 100);
+      return (
+        <span>
             {formatNumber(v)} руб. {' '}
-            <span style={{ color: '#999', fontStyle: 'italic' }}>
-              ({percentage}%)
-            </span>
+          <span style={{ color: '#999', fontStyle: 'italic' }}>
+            ({percentage}%)
           </span>
-        );
-      }
-    },
-    { 
-      title: 'Сумма кредита', 
-      dataIndex: 'principal', 
-      key: 'principal', 
+        </span>
+      );
+    }
+  },
+  { 
+    title: 'Сумма кредита', 
+    dataIndex: 'principal', 
+    key: 'principal', 
       width: columnWidths,
       render: (v: number) => formatNumber(v) + ' руб.' 
-    },
-    { 
-      title: 'Стоимость жилья', 
-      key: 'property_value', 
+  },
+  { 
+    title: 'Стоимость жилья', 
+    key: 'property_value', 
       width: columnWidths,
       render: (record: any) => formatNumber(record.initial_payment + record.principal) + ' руб.' 
-    },
-    { 
-      title: 'Переплата за кредит', 
-      dataIndex: 'overpayment', 
-      key: 'overpayment', 
+  },
+  { 
+    title: 'Переплата за кредит', 
+    dataIndex: 'overpayment', 
+    key: 'overpayment', 
       width: columnWidths,
-      render: (v: number, record: any) => {
-        const percentage = Math.round(record.overpayment_percentage * 100);
-        return (
-          <span>
+    render: (v: number, record: any) => {
+      const percentage = Math.round(record.overpayment_percentage * 100);
+      return (
+        <span>
             {formatNumber(v)} руб. {' '}
-            <span style={{ color: '#999', fontStyle: 'italic' }}>
-              ({percentage}%)
-            </span>
+          <span style={{ color: '#999', fontStyle: 'italic' }}>
+            ({percentage}%)
           </span>
-        );
-      }
+        </span>
+      );
     }
-  ];
+  }
+];
 
   const handleDownloadExcel = () => {
     // Создаем CSV данные
@@ -283,11 +283,11 @@ export const ResultsTable: React.FC<{ data: MortgageResult[], mainRate: number }
         `}
       </style>
       <div style={{ display: 'flex', justifyContent: 'center', width: '100%' }}>
-        <Table
-          dataSource={data}
-          columns={columns}
-          rowKey="years"
-          pagination={false}
+      <Table
+        dataSource={data}
+        columns={columns}
+        rowKey="years"
+        pagination={false}
           style={{ 
             marginBottom: 32, 
             background: '#fff', 
@@ -297,11 +297,11 @@ export const ResultsTable: React.FC<{ data: MortgageResult[], mainRate: number }
             width: 'fit-content',
             maxWidth: '100%'
           }}
-          size="middle"
-          scroll={{ x: true }}
-          tableLayout="fixed"
-          className="custom-table"
-        />
+        size="middle"
+        scroll={{ x: true }}
+        tableLayout="fixed"
+        className="custom-table"
+      />
       </div>
     </>
   );

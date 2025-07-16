@@ -30,13 +30,13 @@ def api_calculate():
     try:
         print('--- /api/calculate called ---')
         print('Request JSON:', request.json)
-        data = request.json
-        interest_rate = float(data['interest_rate'])
+    data = request.json
+    interest_rate = float(data['interest_rate'])
         initial_payment = float(data['initial_payment'])
         min_initial_payment_percentage = float(data['min_initial_payment_percentage'])
-        min_years = int(data['min_years'])
-        max_years = int(data['max_years'])
-        step = int(data.get('step', 0)) if 'step' in data and data['step'] else None
+    min_years = int(data['min_years'])
+    max_years = int(data['max_years'])
+    step = int(data.get('step', 0)) if 'step' in data and data['step'] else None
         property_value = data.get('property_value')
         monthly_payment = data.get('monthly_payment')
         mode = get_mode(data)
@@ -50,11 +50,11 @@ def api_calculate():
             property_value=property_value,
             monthly_payment=monthly_payment
         )
-        if step:
-            calc.calculate(min_years, max_years, step)
-        else:
-            calc.calculate(min_years, max_years)
-        return jsonify(calc.results)
+    if step:
+        calc.calculate(min_years, max_years, step)
+    else:
+        calc.calculate(min_years, max_years)
+    return jsonify(calc.results)
     except Exception as e:
         import traceback
         print('ERROR:', e)
@@ -64,15 +64,15 @@ def api_calculate():
 @app.route('/api/annuity_payments', methods=['POST'])
 def api_annuity_payments():
     try:
-        data = request.json
-        interest_rate = float(data['interest_rate'])
+    data = request.json
+    interest_rate = float(data['interest_rate'])
         initial_payment = float(data['initial_payment'])
         min_initial_payment_percentage = float(data['min_initial_payment_percentage'])
         months = data.get('months')
         if months is not None:
             years = float(months) / 12
         else:
-            years = int(data['years'])
+    years = int(data['years'])
         mode = data.get('mode') #or get_mode(data)
         property_value = data.get('property_value')
         monthly_payment = data.get('monthly_payment')

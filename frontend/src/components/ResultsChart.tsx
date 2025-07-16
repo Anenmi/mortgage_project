@@ -592,7 +592,8 @@ export const ResultsChart: React.FC<{ data: MortgageResult[], mainRate: number, 
     const rightAnnotations = (!withInitialToggle
       ? yPositions.map((y, i) => {
           const baseText = formatMillions(principal[i] + overpay[i]);
-          const monthlyText = isPropertyValueMode 
+          // Показываем аннотацию только если НЕ PropertyValueMode (т.е. только в MonthlyPaymentMode)
+          const monthlyText = !isPropertyValueMode 
             ? ` | Ежемесячный платеж: <span style="color:rgb(17, 27, 53); font-weight: bold; background-color: #fbf398; padding: 1px 3px; border-radius: 2px;">${Math.round(dataSource[i].monthly_payment).toLocaleString('ru-RU')}</span> руб.`
             : '';
           return {
@@ -613,7 +614,8 @@ export const ResultsChart: React.FC<{ data: MortgageResult[], mainRate: number, 
           const minPct = (dataSource[i] as any).min_initial_payment_percentage ?? 0;
           const isTooLow = actualPct <= minPct;
           const baseText = formatMillions(initial[i] + principal[i] + overpay[i]);
-          const monthlyText = isPropertyValueMode 
+          // Показываем аннотацию только если НЕ PropertyValueMode (т.е. только в MonthlyPaymentMode)
+          const monthlyText = !isPropertyValueMode 
             ? ` | Ежемесячный платеж: <span style="color:rgb(31, 66, 104); font-weight: bold; background-color: #fbf398; padding: 1px 3px; border-radius: 2px;">${Math.round(dataSource[i].monthly_payment).toLocaleString('ru-RU')}</span> руб.`
             : '';
           return {
@@ -662,30 +664,30 @@ export const ResultsChart: React.FC<{ data: MortgageResult[], mainRate: number, 
         const isTooLow = actualPct <= minPct;
         const bracketColor = isTooLow ? '#bbb' : '#555';
         return [
-          {
-            type: 'line',
-            x0: 0,
-            x1: value,
+        {
+          type: 'line',
+          x0: 0,
+          x1: value,
             y0: yPositions[index] - 0.2,
             y1: yPositions[index] - 0.2,
             line: { color: bracketColor, width: 0.5 }
-          },
-          {
-            type: 'line',
-            x0: 0,
-            x1: 0,
+        },
+        {
+          type: 'line',
+          x0: 0,
+          x1: 0,
             y0: yPositions[index] - 0.2,
             y1: yPositions[index] - 0.15,
             line: { color: bracketColor, width: 0.5 }
-          },
-          {
-            type: 'line',
-            x0: value,
-            x1: value,
+        },
+        {
+          type: 'line',
+          x0: value,
+          x1: value,
             y0: yPositions[index] - 0.2,
             y1: yPositions[index] - 0.15,
             line: { color: bracketColor, width: 0.5 }
-          }
+        }
         ];
       }).flat());
 
@@ -1318,9 +1320,9 @@ export const ResultsChart: React.FC<{ data: MortgageResult[], mainRate: number, 
                 };
               }
               return (
-                <Slider
-                  min={minYears}
-                  max={maxYears}
+            <Slider
+              min={minYears}
+              max={maxYears}
                   value={sliderValue}
                   onChange={(value: number) => {
                     setSliderValue(value);
@@ -1330,12 +1332,12 @@ export const ResultsChart: React.FC<{ data: MortgageResult[], mainRate: number, 
                     }
                   }}
                   marks={marks}
-                  step={1}
+              step={1}
                   tooltip={{ open: false, trigger: 'hover', formatter: v => `${v} лет` }}
                   trackStyle={COMMON_STYLES.slider.track}
                   handleStyle={COMMON_STYLES.slider.handle}
                   railStyle={COMMON_STYLES.slider.rail}
-                />
+            />
               );
             })()}
           </div>
@@ -1445,7 +1447,7 @@ export const ResultsChart: React.FC<{ data: MortgageResult[], mainRate: number, 
                   style={{ width: '100%', margin: '0 0.5%' }}
                   config={plotlyConfig}
                 />
-              )}
+          )}
             </div>
           </div>
         </div>

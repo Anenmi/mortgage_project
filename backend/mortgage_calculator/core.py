@@ -438,7 +438,7 @@ class MortgageCalculator:
         else:
             print("plot_annuity_payments finished, showing figure")
             fig.show()
-            return None
+            return None 
 
     def plot_annuity_payments_data(self, years: int, mode: str = 'months'):
         import numpy as np
